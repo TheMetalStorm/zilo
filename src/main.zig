@@ -4,6 +4,7 @@ const c = @cImport({
     @cInclude("unistd.h");
     @cInclude("stdlib.h");
     @cInclude("stdio.h");
+    @cInclude("ctype.h");
 });
 
 var orig_termios: c.termios = undefined;
@@ -25,7 +26,7 @@ fn enableRawMode() !void {
     _ = c.atexit(disableRawMode);
     var raw: c.termios = orig_termios;
 
-    raw.c_lflag &= @as(c_uint, c.ECHO);
+    raw.c_lflag &= ~(@as(c_uint, c.ECHO) | @as(c_uint, c.ICANON));
     _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw);
 }
 
@@ -33,9 +34,10 @@ pub fn main() !void {
     try enableRawMode();
 
     const stdin = std.io.getStdIn().reader();
-    var buf: [100]u8 = undefined;
 
-    if (try stdin.readUntilDelimiterOrEof(&buf, 'q')) |user_input| {
-        _ = user_input;
+    while (true) {
+        var a: u8 = try stdin.readByte();
+        if (a == 'q') return;
+        try stdout.print("{}", .{a});
     }
 }
