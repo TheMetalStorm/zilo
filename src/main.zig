@@ -1,4 +1,6 @@
 const std = @import("std");
+const ascii = std.ascii;
+
 const c = @cImport({
     @cInclude("termios.h");
     @cInclude("unistd.h");
@@ -36,8 +38,12 @@ pub fn main() !void {
     const stdin = std.io.getStdIn().reader();
 
     while (true) {
-        var a: u8 = try stdin.readByte();
-        if (a == 'q') return;
-        try stdout.print("{}", .{a});
+        const ch: u8 = try stdin.readByte();
+        if (ch == 'q') return;
+        if (ascii.isControl(ch)) {
+            try stdout.print("{}", .{ch});
+        } else {
+            try stdout.print("{u}", .{ch});
+        }
     }
 }
