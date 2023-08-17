@@ -11,6 +11,11 @@ const c = @cImport({
 //data
 var orig_termios: c.termios = undefined;
 
+//const
+fn CTRL_KEY(k: u8) u8{
+    return (k) & 0x1f;
+}
+
 //terminal
 fn disableRawMode() callconv(.C) void {
     if (c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &orig_termios) != 0) {
@@ -68,6 +73,6 @@ pub fn main() !void {
             print("{u}\r\n", .{ch});
         }
     
-        if (ch == 'q') return;
+        if (ch == CTRL_KEY('q')) return;
     }
 }
