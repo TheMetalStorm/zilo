@@ -11,12 +11,45 @@ const c = @cImport({
 //data
 var orig_termios: c.termios = undefined;
 
+
 //const
+const stdin = std.io.getStdIn().reader();
+
+
+
+
+//terminal
+
 fn CTRL_KEY(k: u8) u8{
     return (k) & 0x1f;
 }
 
-//terminal
+fn editorProcessKeypress() void{
+    var ch: u8 = editorReadKey();    
+    switch (ch) {
+        CTRL_KEY('q') =>{
+            c.exit(0);
+        },
+        else =>{},        
+    }
+}
+
+fn editorReadKey() u8{
+    var readChar: u8 = undefined;
+    if(stdin.readByte()) |res|{
+        readChar = res;
+    }
+    else |err| {
+        if(err == error.EndOfStream) {
+            readChar = 0;
+        }
+        else {
+            die("read");
+        }
+    }
+    return readChar;
+}
+
 fn disableRawMode() callconv(.C) void {
     if (c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &orig_termios) != 0) {
         die("Failed to restore terminal attributes\nRestart Terminal.");
@@ -48,31 +81,9 @@ fn die(str: []const u8) void {
 
 //init
 pub fn main() !void {
-
     enableRawMode();
 
-    const stdin = std.io.getStdIn().reader();
-
     while (true) {
-        var ch: u8 = undefined;
-        if(stdin.readByte()) |res|{
-            ch = res;
-        }
-        else |err| {
-            if(err == error.EndOfStream) {
-                ch = 0;
-            }
-            else {
-                die("read");
-            }
-        }
-    
-        if (ascii.isControl(ch)) {
-            print("{}\r\n", .{ch});
-        } else {
-            print("{u}\r\n", .{ch});
-        }
-    
-        if (ch == CTRL_KEY('q')) return;
+        editorProcessKeypress();
     }
 }
