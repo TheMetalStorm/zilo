@@ -28,8 +28,8 @@ fn enableRawMode() !void {
     _ = c.atexit(disableRawMode);
     var raw: c.termios = orig_termios;
 
-    raw.c_iflag &= ~(@as(c_uint, c.IXON));
-    raw.c_lflag &= ~(@as(c_uint, c.ECHO) | @as(c_uint, c.ICANON) | @as(c_uint, c.ISIG));
+    raw.c_iflag &= ~(@as(c_uint, c.IXON) | @as(c_uint, c.ICRNL));
+    raw.c_lflag &= ~(@as(c_uint, c.ECHO) | @as(c_uint, c.ICANON) | @as(c_uint, c.IEXTEN) | @as(c_uint, c.ISIG));
     _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw);
 }
 
