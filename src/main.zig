@@ -28,9 +28,13 @@ fn enableRawMode() !void {
     _ = c.atexit(disableRawMode);
     var raw: c.termios = orig_termios;
 
-    raw.c_iflag &= ~(@as(c_uint, c.IXON) | @as(c_uint, c.ICRNL));
+    raw.c_iflag &= ~(@as(c_uint, c.BRKINT) | @as(c_uint, c.ICRNL) | @as(c_uint, c.INPCK) | @as(c_uint, c.ISTRIP) | @as(c_uint, c.IXON));
     raw.c_oflag &= ~(@as(c_uint, c.OPOST));
+    raw.c_cflag |= (@as(c_uint, c.CS8));
     raw.c_lflag &= ~(@as(c_uint, c.ECHO) | @as(c_uint, c.ICANON) | @as(c_uint, c.IEXTEN) | @as(c_uint, c.ISIG));
+    raw.c_cc[c.VMIN] = 0;
+    raw.c_cc[c.VTIME] = 1;
+
     _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw);
 }
 
@@ -40,12 +44,15 @@ pub fn main() !void {
     const stdin = std.io.getStdIn().reader();
 
     while (true) {
-        const ch: u8 = try stdin.readByte();
-        if (ch == 'q') return;
+        var ch: u8 = undefined;
+        ch = stdin.readByte() catch 0;
+    
         if (ascii.isControl(ch)) {
             try stdout.print("{}\r\n", .{ch});
         } else {
             try stdout.print("{u}\r\n", .{ch});
         }
+    
+        if (ch == 'q') return;
     }
 }
