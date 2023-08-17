@@ -29,6 +29,7 @@ fn enableRawMode() !void {
     var raw: c.termios = orig_termios;
 
     raw.c_iflag &= ~(@as(c_uint, c.IXON) | @as(c_uint, c.ICRNL));
+    raw.c_oflag &= ~(@as(c_uint, c.OPOST));
     raw.c_lflag &= ~(@as(c_uint, c.ECHO) | @as(c_uint, c.ICANON) | @as(c_uint, c.IEXTEN) | @as(c_uint, c.ISIG));
     _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw);
 }
@@ -42,9 +43,9 @@ pub fn main() !void {
         const ch: u8 = try stdin.readByte();
         if (ch == 'q') return;
         if (ascii.isControl(ch)) {
-            try stdout.print("{}", .{ch});
+            try stdout.print("{}\r\n", .{ch});
         } else {
-            try stdout.print("{u}", .{ch});
+            try stdout.print("{u}\r\n", .{ch});
         }
     }
 }
