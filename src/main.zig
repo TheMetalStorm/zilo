@@ -1,28 +1,26 @@
+//import/include
 const std = @import("std");
 const ascii = std.ascii;
-
+const print = std.debug.print;
 const c = @cImport({
     @cInclude("termios.h");
     @cInclude("unistd.h");
     @cInclude("stdlib.h");
-    @cInclude("stdio.h");
-    @cInclude("ctype.h");
 });
 
+//data
 var orig_termios: c.termios = undefined;
-const stdout = std.io.getStdOut().writer();
 
+//terminal
 fn disableRawMode() callconv(.C) void {
     if (c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &orig_termios) != 0) {
-        _ = c.printf("Failed to restore terminal attributes\nRestart Terminal.");
-        return;
+        die("Failed to restore terminal attributes\nRestart Terminal.");
     }
 }
 
-fn enableRawMode() !void {
+fn enableRawMode() void {
     if (c.tcgetattr(c.STDIN_FILENO, &orig_termios) != 0) {
-        try stdout.print("Failed to get terminal attributes\n", .{});
-        return;
+        die("Failed to get terminal attributes");
     }
 
     _ = c.atexit(disableRawMode);
@@ -35,22 +33,39 @@ fn enableRawMode() !void {
     raw.c_cc[c.VMIN] = 0;
     raw.c_cc[c.VTIME] = 1;
 
-    _ = c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw);
+    if(c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw) == -1) die("tcsetattr")  ;
 }
 
+fn die(str: []const u8) void {
+    print("{s}\r\n", .{str});
+    c.exit(1);
+}
+
+//init
 pub fn main() !void {
-    try enableRawMode();
+
+    enableRawMode();
 
     const stdin = std.io.getStdIn().reader();
 
     while (true) {
         var ch: u8 = undefined;
-        ch = stdin.readByte() catch 0;
+        if(stdin.readByte()) |res|{
+            ch = res;
+        }
+        else |err| {
+            if(err == error.EndOfStream) {
+                ch = 0;
+            }
+            else {
+                die("read");
+            }
+        }
     
         if (ascii.isControl(ch)) {
-            try stdout.print("{}\r\n", .{ch});
+            print("{}\r\n", .{ch});
         } else {
-            try stdout.print("{u}\r\n", .{ch});
+            print("{u}\r\n", .{ch});
         }
     
         if (ch == 'q') return;
