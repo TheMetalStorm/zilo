@@ -11,15 +11,11 @@ const c = @cImport({
 //data
 var orig_termios: c.termios = undefined;
 
-
 //const
 const stdin = std.io.getStdIn().reader();
+const stdout = std.io.getStdOut().writer();
 
-
-
-
-//terminal
-
+//input
 fn CTRL_KEY(k: u8) u8{
     return (k) & 0x1f;
 }
@@ -32,6 +28,13 @@ fn editorProcessKeypress() void{
         },
         else =>{},        
     }
+}
+
+//terminal
+fn editorRefreshScreen() void{
+    print("{s}", .{"\x1b[2J"});
+    print("{s}", .{"\x1b[H"});
+    
 }
 
 fn editorReadKey() u8{
@@ -84,6 +87,7 @@ pub fn main() !void {
     enableRawMode();
 
     while (true) {
+        editorRefreshScreen();
         editorProcessKeypress();
     }
 }
