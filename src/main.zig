@@ -24,9 +24,20 @@ fn editorProcessKeypress() void{
     var ch: u8 = editorReadKey();    
     switch (ch) {
         CTRL_KEY('q') =>{
+            print("{s}", .{"\x1b[2J"});
+            print("{s}", .{"\x1b[H"});
+
             c.exit(0);
         },
         else =>{},        
+    }
+}
+
+//output
+
+fn editorDrawRows() void{
+    for (0..24)|_| {
+        print("{s}", .{"~\r\n"});
     }
 }
 
@@ -35,6 +46,9 @@ fn editorRefreshScreen() void{
     print("{s}", .{"\x1b[2J"});
     print("{s}", .{"\x1b[H"});
     
+    editorDrawRows();
+    print("{s}", .{"\x1b[H"});
+
 }
 
 fn editorReadKey() u8{
@@ -78,6 +92,9 @@ fn enableRawMode() void {
 }
 
 fn die(str: []const u8) void {
+    print("{s}", .{"\x1b[2J"});
+    print("{s}", .{"\x1b[H"});
+
     print("{s}\r\n", .{str});
     c.exit(1);
 }
