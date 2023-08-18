@@ -6,10 +6,15 @@ const c = @cImport({
     @cInclude("termios.h");
     @cInclude("unistd.h");
     @cInclude("stdlib.h");
+    @cInclude("sys/ioctl.h");
 });
 
 //data
-var orig_termios: c.termios = undefined;
+const E = struct{
+    var orig_termios: c.termios = undefined; 
+};
+
+
 
 //const
 const stdin = std.io.getStdIn().reader();
@@ -42,6 +47,20 @@ fn editorDrawRows() void{
 }
 
 //terminal
+
+fn getWindowSize(rows: *u16, cols: *u16) void{
+    var ws : c.winsize = undefined;
+    if (c.ioctl(c.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
+        die("getWindowSize");
+    } else if ( ws.ws_col == 0){
+        die("getWindowSize");
+    } 
+    else {
+        cols.* = ws.ws_col;
+        rows.* = ws.ws_row;
+  }
+}
+
 fn editorRefreshScreen() void{
     print("{s}", .{"\x1b[2J"});
     print("{s}", .{"\x1b[H"});
@@ -68,18 +87,18 @@ fn editorReadKey() u8{
 }
 
 fn disableRawMode() callconv(.C) void {
-    if (c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &orig_termios) != 0) {
+    if (c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &E.orig_termios) != 0) {
         die("Failed to restore terminal attributes\nRestart Terminal.");
     }
 }
 
 fn enableRawMode() void {
-    if (c.tcgetattr(c.STDIN_FILENO, &orig_termios) != 0) {
+    if (c.tcgetattr(c.STDIN_FILENO, &E.orig_termios) != 0) {
         die("Failed to get terminal attributes");
     }
 
     _ = c.atexit(disableRawMode);
-    var raw: c.termios = orig_termios;
+    var raw: c.termios = E.orig_termios;
 
     raw.c_iflag &= ~(@as(c_uint, c.BRKINT) | @as(c_uint, c.ICRNL) | @as(c_uint, c.INPCK) | @as(c_uint, c.ISTRIP) | @as(c_uint, c.IXON));
     raw.c_oflag &= ~(@as(c_uint, c.OPOST));
@@ -101,6 +120,14 @@ fn die(str: []const u8) void {
 
 //init
 pub fn main() !void {
+    var x: u16 = undefined;
+    var y: u16 = undefined;
+    
+    getWindowSize(&x,&y);
+
+    print("x: {}, y {}", .{x,y});
+
+    c.exit(0);
     enableRawMode();
 
     while (true) {
