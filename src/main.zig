@@ -12,6 +12,8 @@ const c = @cImport({
 //data
 const E = struct{
     var orig_termios: c.termios = undefined; 
+    var screenrows: u16 =undefined;
+    var screencols: u16 =undefined;
 };
 
 
@@ -41,24 +43,25 @@ fn editorProcessKeypress() void{
 //output
 
 fn editorDrawRows() void{
-    for (0..24)|_| {
+    for (0..E.screenrows)|_| {
         print("{s}", .{"~\r\n"});
     }
 }
 
 //terminal
 
-fn getWindowSize(rows: *u16, cols: *u16) void{
+fn getWindowSize(rows: *u16, cols: *u16) i2{
     var ws : c.winsize = undefined;
     if (c.ioctl(c.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
-        die("getWindowSize");
+        return -1;
     } else if ( ws.ws_col == 0){
-        die("getWindowSize");
+        return -1;
     } 
     else {
         cols.* = ws.ws_col;
         rows.* = ws.ws_row;
   }
+  return 0;
 }
 
 fn editorRefreshScreen() void{
@@ -119,17 +122,13 @@ fn die(str: []const u8) void {
 }
 
 //init
+
+pub fn initEditor() void{
+    if(getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
+}
 pub fn main() !void {
-    var x: u16 = undefined;
-    var y: u16 = undefined;
-    
-    getWindowSize(&x,&y);
-
-    print("x: {}, y {}", .{x,y});
-
-    c.exit(0);
     enableRawMode();
-
+    initEditor();
     while (true) {
         editorRefreshScreen();
         editorProcessKeypress();
