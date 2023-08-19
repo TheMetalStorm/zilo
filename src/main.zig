@@ -42,6 +42,10 @@ fn editorProcessKeypress() void{
     }
 }
 
+//append buffer
+
+var abuf: [_]u8 = undefined;
+
 //output
 
 fn editorDrawRows() void{
