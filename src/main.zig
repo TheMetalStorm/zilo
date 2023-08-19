@@ -6,6 +6,8 @@ const c = @cImport({
     @cInclude("termios.h");
     @cInclude("unistd.h");
     @cInclude("stdlib.h");
+    @cInclude("stdio.h");
+    @cInclude("ctype.h");
     @cInclude("sys/ioctl.h");
 });
 
@@ -50,18 +52,48 @@ fn editorDrawRows() void{
 
 //terminal
 
+
+fn getCursorPosition() i2{
+    var buf: [32]u8 = undefined;
+    var i: u32 = 0;
+    
+    if (c.write(c.STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
+
+    while(i<buf.len){
+        if (c.read(c.STDIN_FILENO, &buf[i], 1) != 1) break;
+        if (buf[i] == 'R') break;
+        i+= 1;
+    }
+
+    buf[1] = '0';
+    //const span = std.mem.spanZ(buf[0..]);
+    //const c_buf = std.cstr.toCStr(span.ptr);
+    _ = c.printf("\r\n&buf[1]: '%s'\r\n", &buf[1]);
+    
+    while(editorReadKey() == 0){
+
+    }
+    return -1;
+
+}
+
 fn getWindowSize(rows: *u16, cols: *u16) i2{
     var ws : c.winsize = undefined;
-    if (c.ioctl(c.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
-        return -1;
-    } else if ( ws.ws_col == 0){
-        return -1;
-    } 
+    if (true){
+        //if (c.ioctl(c.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
+            if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+                return getCursorPosition();
+        //} else if ( ws.ws_col == 0){
+          //  if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+            //return getCursorPosition();
+        //} 
+    }
     else {
         cols.* = ws.ws_col;
         rows.* = ws.ws_row;
+        return 0;
   }
-  return 0;
+  
 }
 
 fn editorRefreshScreen() void{
