@@ -106,10 +106,12 @@ fn editorRefreshScreen() !void{
     var ab = ArrayList(u8).init(allocator);
     defer ab.deinit();
     
+    try ab.appendSlice("\x1b[?25l");
     try ab.appendSlice("\x1b[2J");
     try ab.appendSlice("\x1b[H");
     try editorDrawRows(&ab);
     try ab.appendSlice("\x1b[H");
+    try ab.appendSlice("\x1b[?25h");
 
     for (ab.items) |value| {
         std.debug.print("{c}", .{value});
