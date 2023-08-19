@@ -61,14 +61,16 @@ fn getCursorPosition() i2{
 
     while(i<buf.len){
         if (c.read(c.STDIN_FILENO, &buf[i], 1) != 1) break;
-        if (buf[i] == 'R') break;
+        if (buf[i] == 'R') {
+            i+= 1;
+            break;   
+        }
         i+= 1;
     }
-
-    buf[1] = '0';
-    //const span = std.mem.spanZ(buf[0..]);
-    //const c_buf = std.cstr.toCStr(span.ptr);
-    _ = c.printf("\r\n&buf[1]: '%s'\r\n", &buf[1]);
+    
+    const c_buf : [*c]u8 = &buf[0];
+    c_buf[i] = 0;  // Explicitly null-terminate the c_buf pointer
+    _ = c.printf("\r\n&buf[1]: '%s'\r\n", &c_buf[1]);
     
     while(editorReadKey() == 0){
 
