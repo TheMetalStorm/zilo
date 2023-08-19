@@ -53,7 +53,7 @@ fn editorDrawRows() void{
 //terminal
 
 
-fn getCursorPosition() i2{
+fn getCursorPosition(rows: *u16, cols: *u16) i2{
     var buf: [32]u8 = undefined;
     var i: u32 = 0;
     
@@ -67,29 +67,24 @@ fn getCursorPosition() i2{
         }
         i+= 1;
     }
-    
-    const c_buf : [*c]u8 = &buf[0];
-    c_buf[i] = 0;  // Explicitly null-terminate the c_buf pointer
-    _ = c.printf("\r\n&buf[1]: '%s'\r\n", &c_buf[1]);
-    
-    while(editorReadKey() == 0){
 
-    }
-    return -1;
+    if (buf[0] != '\x1b') return -1;
+    if(buf[1] != '[') return -1;
+
+    if (c.sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
+    return 0;
 
 }
 
 fn getWindowSize(rows: *u16, cols: *u16) i2{
     var ws : c.winsize = undefined;
-    if (true){
-        //if (c.ioctl(c.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
-            if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
-                return getCursorPosition();
-        //} else if ( ws.ws_col == 0){
-          //  if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
-            //return getCursorPosition();
-        //} 
-    }
+    if (c.ioctl(c.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
+        if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+        return getCursorPosition(rows, cols);
+    } else if ( ws.ws_col == 0){
+        if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+        return getCursorPosition(rows, cols);
+    } 
     else {
         cols.* = ws.ws_col;
         rows.* = ws.ws_row;
