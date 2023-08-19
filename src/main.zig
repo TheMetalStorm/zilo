@@ -2,6 +2,7 @@
 const std = @import("std");
 const ascii = std.ascii;
 const print = std.debug.print;
+const ArrayList = std.ArrayList;
 const c = @cImport({
     @cInclude("termios.h");
     @cInclude("unistd.h");
@@ -44,16 +45,15 @@ fn editorProcessKeypress() void{
 
 //append buffer
 
-var abuf: [_]u8 = undefined;
 
 //output
 
-fn editorDrawRows() void{
+fn editorDrawRows(ab: *ArrayList(u8)) !void{
     for (0..E.screenrows)|y| {
-        print("{s}", .{"~"});
+        try ab.append('~');
 
         if (y < E.screenrows - 1) {
-            print("{s}", .{"\r\n"});
+            try ab.appendSlice("\r\n");
         }
     }
 }
@@ -101,12 +101,19 @@ fn getWindowSize(rows: *u16, cols: *u16) i2{
   
 }
 
-fn editorRefreshScreen() void{
-    print("{s}", .{"\x1b[2J"});
-    print("{s}", .{"\x1b[H"});
+fn editorRefreshScreen() !void{
+    var allocator = std.heap.page_allocator;
+    var ab = ArrayList(u8).init(allocator);
+    defer ab.deinit();
     
-    editorDrawRows();
-    print("{s}", .{"\x1b[H"});
+    try ab.appendSlice("\x1b[2J");
+    try ab.appendSlice("\x1b[H");
+    try editorDrawRows(&ab);
+    try ab.appendSlice("\x1b[H");
+
+    for (ab.items) |value| {
+        std.debug.print("{c}", .{value});
+    }
 
 }
 
@@ -167,7 +174,7 @@ pub fn main() !void {
     enableRawMode();
     initEditor();
     while (true) {
-        editorRefreshScreen();
+        try editorRefreshScreen();
         editorProcessKeypress();
     }
 }
