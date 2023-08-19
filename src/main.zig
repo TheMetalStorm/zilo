@@ -45,8 +45,12 @@ fn editorProcessKeypress() void{
 //output
 
 fn editorDrawRows() void{
-    for (0..E.screenrows)|_| {
-        print("{s}", .{"~\r\n"});
+    for (0..E.screenrows)|y| {
+        print("{s}", .{"~"});
+
+        if (y < E.screenrows - 1) {
+            print("{s}", .{"\r\n"});
+        }
     }
 }
 
