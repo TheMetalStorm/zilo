@@ -15,6 +15,8 @@ const c = @cImport({
 //data
 const E = struct{
     var orig_termios: c.termios = undefined; 
+    var cx: u32 = undefined;
+    var cy: u32 = undefined;
     var screenrows: u16 =undefined;
     var screencols: u16 =undefined;
 };
@@ -129,7 +131,11 @@ fn editorRefreshScreen() !void{
     try ab.appendSlice("\x1b[?25l");
     try ab.appendSlice("\x1b[H");
     try editorDrawRows(&ab);
-    try ab.appendSlice("\x1b[H");
+
+    const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{E.cy + 1, E.cx + 1});
+    defer allocator.free(cursorCommand); 
+    try ab.appendSlice(cursorCommand);
+
     try ab.appendSlice("\x1b[?25h");
 
     for (ab.items) |value| {
@@ -189,6 +195,9 @@ fn die(str: []const u8) void {
 //init
 
 pub fn initEditor() void{
+    E.cx = 0;
+    E.cy = 0;
+    
     if(getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
 }
 pub fn main() !void {
