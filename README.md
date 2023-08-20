@@ -9,7 +9,7 @@ Of course there are also very interesting tasks that I get to work on, but even 
 So I am kind of trying to reignite my passion for programming. And what better way to do that than trying to learn a new Language! Originally I was waiting for the release of another language that I've been following for a while. It is called Jai. And while I still plan to experiment with that language once it (eventually, but take your time Jon) releases, I wanted to learn something engaging and new now. That is how I encountered Zig.
 
 I would've become really bored really fast if I had just started solving Leet Code problems or had watched a Youtube Tutorial explaining the syntax of Zig to me. 
-But then I remembered a series of youtube videos I had watched a few years ago, in which the Creator tried to port the Text Editor kilo, which is based on nano, in Rust.
+But then I remembered a series of youtube videos I had watched a few years ago, in which the Creator tried to port the Text Editor kilo, which is based on nano, to Rust.
 
 For those interested, here is the link to his channel: https://www.youtube.com/@UncleScientist
 
