@@ -12,6 +12,14 @@ const c = @cImport({
     @cInclude("sys/ioctl.h");
 });
 
+//enum
+const editorKey = enum(u8) {
+    ARROW_LEFT = 'a',
+    ARROW_RIGHT = 'd',
+    ARROW_UP = 'w',
+    ARROW_DOWN = 's'
+};
+
 //data
 const E = struct{
     var orig_termios: c.termios = undefined; 
@@ -35,16 +43,16 @@ fn CTRL_KEY(k: u8) u8{
 
 fn editorMoveCursor(ch: u8) void {
     switch (ch) {
-        'a'=>{
+        @intFromEnum(editorKey.ARROW_LEFT)=>{
             E.cx-=1;
         },
-        'd'=>{
+        @intFromEnum(editorKey.ARROW_RIGHT)=>{
             E.cx+=1;
         },
-        'w'=>{
+        @intFromEnum(editorKey.ARROW_UP)=>{
             E.cy-=1;
         },
-        's'=>{
+        @intFromEnum(editorKey.ARROW_DOWN)=>{
             E.cy+=1;
         },
         else =>{},
@@ -61,7 +69,10 @@ fn editorProcessKeypress() void{
 
             c.exit(0);
         },
-        'w', 's', 'a', 'd' =>{
+        @intFromEnum(editorKey.ARROW_UP),
+        @intFromEnum(editorKey.ARROW_DOWN),
+        @intFromEnum(editorKey.ARROW_LEFT),
+        @intFromEnum(editorKey.ARROW_RIGHT) =>{
             editorMoveCursor(ch);
         },
         else =>{},        
@@ -179,7 +190,29 @@ fn editorReadKey() u8{
             die("read");
         }
     }
-    return readChar;
+
+    if (readChar == '\x1b'){
+        var seq: [3]u8 = undefined;
+        if (c.read(c.STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
+        if (c.read(c.STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+
+        if(seq[0] == '['){
+            switch(seq[1]){
+                'A'=> return @intFromEnum(editorKey.ARROW_UP),
+                'B'=> return @intFromEnum(editorKey.ARROW_DOWN),
+                'C'=> return @intFromEnum(editorKey.ARROW_RIGHT),
+                'D'=> return @intFromEnum(editorKey.ARROW_LEFT),
+                else=>{}
+            }
+        }
+    
+        return '\x1b';
+    }
+    else {
+        return readChar;
+    }
+
+    
 }
 
 fn disableRawMode() callconv(.C) void {
