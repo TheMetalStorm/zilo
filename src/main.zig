@@ -24,6 +24,7 @@ const E = struct{
 //const
 const stdin = std.io.getStdIn().reader();
 const stdout = std.io.getStdOut().writer();
+const ZILO_VERSION =  "0.0.1";
 
 //input
 fn CTRL_KEY(k: u8) u8{
@@ -50,7 +51,26 @@ fn editorProcessKeypress() void{
 
 fn editorDrawRows(ab: *ArrayList(u8)) !void{
     for (0..E.screenrows)|y| {
-        try ab.append('~');
+        if (y == E.screenrows / 3) {
+            var welcome = "Zilo editor -- version " ++ ZILO_VERSION;
+
+            var padding = (E.screencols - welcome.len) / 2;
+            try ab.append('~');
+            padding-=1;
+            
+            while (padding>1) {
+                try ab.append(' ');
+                padding-=1;
+            }
+
+            try ab.appendSlice(welcome);
+        }
+        else
+        {
+            try ab.append('~');
+        }
+
+        try ab.appendSlice("\x1b[K");
 
         if (y < E.screenrows - 1) {
             try ab.appendSlice("\r\n");
@@ -107,7 +127,6 @@ fn editorRefreshScreen() !void{
     defer ab.deinit();
     
     try ab.appendSlice("\x1b[?25l");
-    try ab.appendSlice("\x1b[2J");
     try ab.appendSlice("\x1b[H");
     try editorDrawRows(&ab);
     try ab.appendSlice("\x1b[H");
