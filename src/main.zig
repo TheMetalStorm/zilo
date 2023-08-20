@@ -33,7 +33,26 @@ fn CTRL_KEY(k: u8) u8{
     return (k) & 0x1f;
 }
 
+fn editorMoveCursor(ch: u8) void {
+    switch (ch) {
+        'a'=>{
+            E.cx-=1;
+        },
+        'd'=>{
+            E.cx+=1;
+        },
+        'w'=>{
+            E.cy-=1;
+        },
+        's'=>{
+            E.cy+=1;
+        },
+        else =>{},
+    }
+}
+
 fn editorProcessKeypress() void{
+    
     var ch: u8 = editorReadKey();    
     switch (ch) {
         CTRL_KEY('q') =>{
@@ -41,6 +60,9 @@ fn editorProcessKeypress() void{
             print("{s}", .{"\x1b[H"});
 
             c.exit(0);
+        },
+        'w', 's', 'a', 'd' =>{
+            editorMoveCursor(ch);
         },
         else =>{},        
     }
