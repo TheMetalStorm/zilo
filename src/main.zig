@@ -13,11 +13,13 @@ const c = @cImport({
 });
 
 //enum
-const editorKey = enum(u8) {
-    ARROW_LEFT = 'a',
-    ARROW_RIGHT = 'd',
-    ARROW_UP = 'w',
-    ARROW_DOWN = 's'
+const editorKey = enum(u32) {
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN,
+    PAGE_UP,
+    PAGE_DOWN
 };
 
 //data
@@ -41,19 +43,27 @@ fn CTRL_KEY(k: u8) u8{
     return (k) & 0x1f;
 }
 
-fn editorMoveCursor(ch: u8) void {
+fn editorMoveCursor(ch: u32) void {
     switch (ch) {
         @intFromEnum(editorKey.ARROW_LEFT)=>{
-            E.cx-=1;
+            if (E.cx != 0) {
+                E.cx-=1;
+            }
         },
         @intFromEnum(editorKey.ARROW_RIGHT)=>{
-            E.cx+=1;
+            if (E.cx != E.screencols - 1) {
+                E.cx+=1;
+            }
         },
         @intFromEnum(editorKey.ARROW_UP)=>{
-            E.cy-=1;
+            if (E.cy != 0) {
+                E.cy-=1;
+            }
         },
         @intFromEnum(editorKey.ARROW_DOWN)=>{
-            E.cy+=1;
+            if (E.cy != E.screenrows - 1) {
+                E.cy+=1;
+            }
         },
         else =>{},
     }
@@ -61,13 +71,26 @@ fn editorMoveCursor(ch: u8) void {
 
 fn editorProcessKeypress() void{
     
-    var ch: u8 = editorReadKey();    
+    var ch: u32 = editorReadKey();    
     switch (ch) {
         CTRL_KEY('q') =>{
             print("{s}", .{"\x1b[2J"});
             print("{s}", .{"\x1b[H"});
 
             c.exit(0);
+        },
+        @intFromEnum(editorKey.PAGE_DOWN),
+        @intFromEnum(editorKey.PAGE_UP) =>{
+            var times: u16  = E.screenrows;
+            while (times!=0){
+                if(ch == @intFromEnum(editorKey.PAGE_UP)){
+                    editorMoveCursor(@intFromEnum(editorKey.ARROW_UP));
+                }
+                else{
+                    editorMoveCursor(@intFromEnum(editorKey.ARROW_DOWN));
+                }
+                times -=1;
+            }        
         },
         @intFromEnum(editorKey.ARROW_UP),
         @intFromEnum(editorKey.ARROW_DOWN),
@@ -177,7 +200,7 @@ fn editorRefreshScreen() !void{
 
 }
 
-fn editorReadKey() u8{
+fn editorReadKey() u32{
     var readChar: u8 = undefined;
     if(stdin.readByte()) |res|{
         readChar = res;
@@ -197,12 +220,25 @@ fn editorReadKey() u8{
         if (c.read(c.STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
 
         if(seq[0] == '['){
-            switch(seq[1]){
-                'A'=> return @intFromEnum(editorKey.ARROW_UP),
-                'B'=> return @intFromEnum(editorKey.ARROW_DOWN),
-                'C'=> return @intFromEnum(editorKey.ARROW_RIGHT),
-                'D'=> return @intFromEnum(editorKey.ARROW_LEFT),
-                else=>{}
+
+            if (seq[1] >= '0' and seq[1] <= '9') {
+                if (c.read(c.STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
+                if (seq[2] == '~') {
+                    switch (seq[1]) {
+                        '5'=> return @intFromEnum(editorKey.PAGE_UP),
+                        '6'=> return @intFromEnum(editorKey.PAGE_DOWN),
+                        else=>{}
+                    }
+                }
+            }
+            else{
+                switch(seq[1]){
+                    'A'=> return @intFromEnum(editorKey.ARROW_UP),
+                    'B'=> return @intFromEnum(editorKey.ARROW_DOWN),
+                    'C'=> return @intFromEnum(editorKey.ARROW_RIGHT),
+                    'D'=> return @intFromEnum(editorKey.ARROW_LEFT),
+                    else=>{}
+                }
             }
         }
     
