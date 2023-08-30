@@ -26,13 +26,22 @@ const editorKey = enum(u32) {
 };
 
 //data
-const E = struct{
+const erow = struct{
+    var size: u32 = undefined;
+    var chars: [*]u8 = undefined;
+};
+
+const editorConfig = struct{
     var orig_termios: c.termios = undefined; 
     var cx: u32 = undefined;
     var cy: u32 = undefined;
-    var screenrows: u16 =undefined;
-    var screencols: u16 =undefined;
+    var screenrows: u32 =undefined;
+    var screencols: u32 =undefined;
+    var numRows: u32 =undefined;
+    var row: erow = undefined;
 };
+
+const E = editorConfig;
 
 
 
@@ -90,7 +99,7 @@ fn editorProcessKeypress() void{
         },
         @intFromEnum(editorKey.PAGE_DOWN),
         @intFromEnum(editorKey.PAGE_UP) =>{
-            var times: u16  = E.screenrows;
+            var times: u32  = E.screenrows;
             while (times!=0){
                 if(ch == @intFromEnum(editorKey.PAGE_UP)){
                     editorMoveCursor(@intFromEnum(editorKey.ARROW_UP));
@@ -148,7 +157,7 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void{
 //terminal
 
 
-fn getCursorPosition(rows: *u16, cols: *u16) i2{
+fn getCursorPosition(rows: *u32, cols: *u32) i2{
     var buf: [32]u8 = undefined;
     var i: u32 = 0;
     
@@ -171,7 +180,7 @@ fn getCursorPosition(rows: *u16, cols: *u16) i2{
 
 }
 
-fn getWindowSize(rows: *u16, cols: *u16) i2{
+fn getWindowSize(rows: *u32, cols: *u32) i2{
     var ws : c.winsize = undefined;
     if (c.ioctl(c.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
         if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
@@ -310,7 +319,7 @@ fn die(str: []const u8) void {
 pub fn initEditor() void{
     E.cx = 0;
     E.cy = 0;
-    
+    E.numrows = 0;
     if(getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
 }
 pub fn main() !void {
