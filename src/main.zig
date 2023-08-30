@@ -18,6 +18,9 @@ const editorKey = enum(u32) {
     ARROW_RIGHT,
     ARROW_UP,
     ARROW_DOWN,
+    DEL_KEY,
+    HOME_KEY,
+    END_KEY,
     PAGE_UP,
     PAGE_DOWN
 };
@@ -78,6 +81,12 @@ fn editorProcessKeypress() void{
             print("{s}", .{"\x1b[H"});
 
             c.exit(0);
+        },
+        @intFromEnum(editorKey.HOME_KEY)=>{
+            E.cx = 0;
+        },
+        @intFromEnum(editorKey.END_KEY) =>{
+            E.cx = E.screencols-1;
         },
         @intFromEnum(editorKey.PAGE_DOWN),
         @intFromEnum(editorKey.PAGE_UP) =>{
@@ -225,8 +234,13 @@ fn editorReadKey() u32{
                 if (c.read(c.STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
                 if (seq[2] == '~') {
                     switch (seq[1]) {
+                        '1'  => return @intFromEnum(editorKey.HOME_KEY),
+                        '3' => return @intFromEnum(editorKey.DEL_KEY),
+                        '4'  => return @intFromEnum(editorKey.END_KEY),
                         '5'=> return @intFromEnum(editorKey.PAGE_UP),
                         '6'=> return @intFromEnum(editorKey.PAGE_DOWN),
+                        '7'  => return @intFromEnum(editorKey.HOME_KEY),
+                        '8'  => return @intFromEnum(editorKey.END_KEY),
                         else=>{}
                     }
                 }
@@ -237,8 +251,16 @@ fn editorReadKey() u32{
                     'B'=> return @intFromEnum(editorKey.ARROW_DOWN),
                     'C'=> return @intFromEnum(editorKey.ARROW_RIGHT),
                     'D'=> return @intFromEnum(editorKey.ARROW_LEFT),
+                    'H'  => return @intFromEnum(editorKey.HOME_KEY),
+                    'F'  => return @intFromEnum(editorKey.END_KEY),
                     else=>{}
                 }
+            }
+        } else if (seq[0] == 'O') {
+            switch (seq[1]) {
+                'H' => return @intFromEnum(editorKey.HOME_KEY),
+                'F' => return @intFromEnum(editorKey.END_KEY),
+                else=>{}
             }
         }
     
