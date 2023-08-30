@@ -3,6 +3,8 @@ const std = @import("std");
 const ascii = std.ascii;
 const print = std.debug.print;
 const ArrayList = std.ArrayList;
+const allocator = std.heap.page_allocator;
+
 const c = @cImport({
     @cInclude("termios.h");
     @cInclude("unistd.h");
@@ -26,10 +28,7 @@ const editorKey = enum(u32) {
 };
 
 //data
-const erow = struct{
-    var size: u32 = undefined;
-    var chars: [*]u8 = undefined;
-};
+const erow = ArrayList(u8).init(allocator);
 
 const editorConfig = struct{
     var orig_termios: c.termios = undefined; 
@@ -37,14 +36,11 @@ const editorConfig = struct{
     var cy: u32 = undefined;
     var screenrows: u32 =undefined;
     var screencols: u32 =undefined;
-    var numRows: u32 =undefined;
-    var row: erow = undefined;
+    var numrows: u32 =undefined;
+    var row: ArrayList(u8) = undefined;
 };
 
 const E = editorConfig;
-
-
-
 //const
 const stdin = std.io.getStdIn().reader();
 const stdout = std.io.getStdOut().writer();
@@ -120,32 +116,42 @@ fn editorProcessKeypress() void{
     }
 }
 
-//append buffer
-
-
+//file i/o
+fn editorOpen() !void{
+    try E.row.appendSlice("Hello, World");
+    E.numrows += 1;
+}
 //output
 
 fn editorDrawRows(ab: *ArrayList(u8)) !void{
     for (0..E.screenrows)|y| {
-        if (y == E.screenrows / 3) {
-            var welcome = "Zilo editor -- version " ++ ZILO_VERSION;
+        if (y >= E.numrows) {
+            if (y == E.screenrows / 3) {
+                var welcome = "Zilo editor -- version " ++ ZILO_VERSION;
 
-            var padding = (E.screencols - welcome.len) / 2;
-            try ab.append('~');
-            padding-=1;
-            
-            while (padding>1) {
-                try ab.append(' ');
+                var padding = (E.screencols - welcome.len) / 2;
+                try ab.append('~');
                 padding-=1;
+                
+                while (padding>1) {
+                    try ab.append(' ');
+                    padding-=1;
+                }
+
+                try ab.appendSlice(welcome);
             }
-
-            try ab.appendSlice(welcome);
+            else
+            {
+                try ab.append('~');
+            }
         }
-        else
-        {
-            try ab.append('~');
+        else {
+            var len: usize = E.row.items.len;
+            if (len > E.screencols) {
+                len = E.screencols;
+            }
+            try ab.appendSlice(E.row.items);
         }
-
         try ab.appendSlice("\x1b[K");
 
         if (y < E.screenrows - 1) {
@@ -197,8 +203,9 @@ fn getWindowSize(rows: *u32, cols: *u32) i2{
   
 }
 
+
+
 fn editorRefreshScreen() !void{
-    var allocator = std.heap.page_allocator;
     var ab = ArrayList(u8).init(allocator);
     defer ab.deinit();
     
@@ -323,8 +330,12 @@ pub fn initEditor() void{
     if(getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
 }
 pub fn main() !void {
+    var row = ArrayList(u8).init(allocator);
+    defer row.deinit();
+    E.row = row;
     enableRawMode();
     initEditor();
+    try editorOpen();
     while (true) {
         try editorRefreshScreen();
         editorProcessKeypress();
