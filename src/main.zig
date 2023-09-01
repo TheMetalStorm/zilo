@@ -37,7 +37,7 @@ const editorConfig = struct{
     var screenrows: u32 =undefined;
     var screencols: u32 =undefined;
     var numrows: u32 =undefined;
-    var row: ArrayList(u8) = undefined;
+    var rows: ArrayList(ArrayList(u8)) = undefined;
 };
 
 const E = editorConfig;
@@ -123,9 +123,7 @@ fn editorOpen(filename: []const u8) !void{
 
     var buf: [1000]u8 = undefined;
     while (try file.reader().readUntilDelimiterOrEof(buf[0..], '\n')) |line| {
-        try E.row.appendSlice(line);
-        E.numrows += 1;
-        break;
+        try editorAppendRow(line);
     } 
     
 }
@@ -154,11 +152,11 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void{
             }
         }
         else {
-            var len: usize = E.row.items.len;
+            var len: usize = E.rows.items[y].items.len;
             if (len > E.screencols) {
                 len = E.screencols;
             }
-            try ab.appendSlice(E.row.items);
+            try ab.appendSlice(E.rows.items[y].items);
         }
         try ab.appendSlice("\x1b[K");
 
@@ -211,6 +209,13 @@ fn getWindowSize(rows: *u32, cols: *u32) i2{
   
 }
 
+// row operations
+fn editorAppendRow(content: []const u8) !void{
+    var row = ArrayList(u8).init(allocator);
+    try row.appendSlice(content);
+    try E.rows.append(row);
+    E.numrows += 1;
+}
 
 
 fn editorRefreshScreen() !void{
@@ -338,13 +343,11 @@ pub fn initEditor() void{
     if(getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
 }
 pub fn main() !void {
-    var row = ArrayList(u8).init(allocator);
-    defer row.deinit();
-    E.row = row;
-
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-    std.debug.print("Arguments: {s}\n", .{args});
+
+    var rows = ArrayList(ArrayList(u8)).init(allocator);
+    E.rows = rows;
 
     enableRawMode();
     initEditor();
@@ -356,4 +359,16 @@ pub fn main() !void {
         try editorRefreshScreen();
         editorProcessKeypress();
     }
+
+    deinitRows();
+}
+
+fn deinitRows() void{
+     // Explicitly de-initialize each of the ArrayList(u8) in the list
+    for (E.rows.items) |*array_list| {
+        array_list.deinit();
+    }
+
+    // Explicitly de-initialize the container list itself
+    E.rows.deinit();
 }
