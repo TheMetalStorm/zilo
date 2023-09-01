@@ -348,7 +348,8 @@ pub fn main() !void {
 
     var rows = ArrayList(ArrayList(u8)).init(allocator);
     E.rows = rows;
-
+    defer deinitRows();
+    
     enableRawMode();
     initEditor();
     
@@ -360,15 +361,12 @@ pub fn main() !void {
         editorProcessKeypress();
     }
 
-    deinitRows();
 }
 
 fn deinitRows() void{
-     // Explicitly de-initialize each of the ArrayList(u8) in the list
     for (E.rows.items) |*array_list| {
         array_list.deinit();
     }
 
-    // Explicitly de-initialize the container list itself
     E.rows.deinit();
 }
