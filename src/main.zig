@@ -117,16 +117,24 @@ fn editorProcessKeypress() void{
 }
 
 //file i/o
-fn editorOpen() !void{
-    try E.row.appendSlice("Hello, World");
-    E.numrows += 1;
+fn editorOpen(filename: []const u8) !void{
+    var file = try std.fs.cwd().openFile(filename, .{});
+    defer file.close();
+
+    var buf: [1000]u8 = undefined;
+    while (try file.reader().readUntilDelimiterOrEof(buf[0..], '\n')) |line| {
+        try E.row.appendSlice(line);
+        E.numrows += 1;
+        break;
+    } 
+    
 }
 //output
 
 fn editorDrawRows(ab: *ArrayList(u8)) !void{
     for (0..E.screenrows)|y| {
         if (y >= E.numrows) {
-            if (y == E.screenrows / 3) {
+            if (E.numrows == 0 and y == E.screenrows / 3) {
                 var welcome = "Zilo editor -- version " ++ ZILO_VERSION;
 
                 var padding = (E.screencols - welcome.len) / 2;
@@ -333,9 +341,17 @@ pub fn main() !void {
     var row = ArrayList(u8).init(allocator);
     defer row.deinit();
     E.row = row;
+
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+    std.debug.print("Arguments: {s}\n", .{args});
+
     enableRawMode();
     initEditor();
-    try editorOpen();
+    
+    if(args.len >= 2){
+        try editorOpen(args[1]);
+    }
     while (true) {
         try editorRefreshScreen();
         editorProcessKeypress();
