@@ -27,13 +27,11 @@ const editorKey = enum(u32) {
     PAGE_DOWN
 };
 
-//data
-const erow = ArrayList(u8).init(allocator);
-
 const editorConfig = struct{
     var orig_termios: c.termios = undefined; 
     var cx: u32 = undefined;
     var cy: u32 = undefined;
+    var rowoff: u32 = undefined;
     var screenrows: u32 =undefined;
     var screencols: u32 =undefined;
     var numrows: u32 =undefined;
@@ -69,7 +67,7 @@ fn editorMoveCursor(ch: u32) void {
             }
         },
         @intFromEnum(editorKey.ARROW_DOWN)=>{
-            if (E.cy != E.screenrows - 1) {
+            if (E.cy < E.numrows) {
                 E.cy+=1;
             }
         },
@@ -129,9 +127,19 @@ fn editorOpen(filename: []const u8) !void{
 }
 //output
 
+fn editorScroll () void{
+     if (E.cy < E.rowoff) {
+    E.rowoff = E.cy;
+  }
+  if (E.cy >= E.rowoff + E.screenrows) {
+    E.rowoff = E.cy - E.screenrows + 1;
+  }
+}
+
 fn editorDrawRows(ab: *ArrayList(u8)) !void{
     for (0..E.screenrows)|y| {
-        if (y >= E.numrows) {
+        var filerow: usize =  y + E.rowoff;
+        if (filerow >= E.numrows) {
             if (E.numrows == 0 and y == E.screenrows / 3) {
                 var welcome = "Zilo editor -- version " ++ ZILO_VERSION;
 
@@ -152,11 +160,11 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void{
             }
         }
         else {
-            var len: usize = E.rows.items[y].items.len;
+            var len: usize = E.rows.items[filerow].items.len;
             if (len > E.screencols) {
                 len = E.screencols;
             }
-            try ab.appendSlice(E.rows.items[y].items);
+            try ab.appendSlice(E.rows.items[filerow].items);
         }
         try ab.appendSlice("\x1b[K");
 
@@ -219,6 +227,8 @@ fn editorAppendRow(content: []const u8) !void{
 
 
 fn editorRefreshScreen() !void{
+    editorScroll();
+    
     var ab = ArrayList(u8).init(allocator);
     defer ab.deinit();
     
@@ -226,7 +236,7 @@ fn editorRefreshScreen() !void{
     try ab.appendSlice("\x1b[H");
     try editorDrawRows(&ab);
 
-    const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{E.cy + 1, E.cx + 1});
+    const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{(E.cy - E.rowoff) + 1, E.cx + 1});
     defer allocator.free(cursorCommand); 
     try ab.appendSlice(cursorCommand);
 
@@ -339,6 +349,7 @@ fn die(str: []const u8) void {
 pub fn initEditor() void{
     E.cx = 0;
     E.cy = 0;
+    E.rowoff = 0;
     E.numrows = 0;
     if(getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
 }
