@@ -32,6 +32,7 @@ const editorConfig = struct{
     var cx: u32 = undefined;
     var cy: u32 = undefined;
     var rowoff: u32 = undefined;
+    var coloff: u32 = undefined;
     var screenrows: u32 =undefined;
     var screencols: u32 =undefined;
     var numrows: u32 =undefined;
@@ -57,9 +58,7 @@ fn editorMoveCursor(ch: u32) void {
             }
         },
         @intFromEnum(editorKey.ARROW_RIGHT)=>{
-            if (E.cx != E.screencols - 1) {
-                E.cx+=1;
-            }
+            E.cx+=1;
         },
         @intFromEnum(editorKey.ARROW_UP)=>{
             if (E.cy != 0) {
@@ -129,12 +128,19 @@ fn editorOpen(filename: []const u8) !void{
 
 fn editorScroll () void{
      if (E.cy < E.rowoff) {
-    E.rowoff = E.cy;
-  }
-  if (E.cy >= E.rowoff + E.screenrows) {
-    E.rowoff = E.cy - E.screenrows + 1;
-  }
-}
+      E.rowoff = E.cy;
+    }
+    if (E.cy >= E.rowoff + E.screenrows) {
+      E.rowoff = E.cy - E.screenrows + 1;
+    }
+    
+    if (E.cx < E.coloff) {
+      E.coloff = E.cx;
+    }
+    if (E.cx >= E.coloff + E.screencols) {
+      E.coloff = E.cx - E.screencols + 1;
+    }
+}   
 
 fn editorDrawRows(ab: *ArrayList(u8)) !void{
     for (0..E.screenrows)|y| {
@@ -160,10 +166,14 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void{
             }
         }
         else {
-            var len: usize = E.rows.items[filerow].items.len;
-            if (len > E.screencols) {
-                len = E.screencols;
-            }
+        
+            var len: usize = 0;
+            if(E.coloff<E.rows.items[filerow].items.len) 
+            {len = E.rows.items[filerow].items.len - E.coloff;}
+             
+            if (len > E.screencols) len = E.screencols;
+            
+
             try ab.appendSlice(E.rows.items[filerow].items);
         }
         try ab.appendSlice("\x1b[K");
@@ -223,6 +233,7 @@ fn editorAppendRow(content: []const u8) !void{
     try row.appendSlice(content);
     try E.rows.append(row);
     E.numrows += 1;
+
 }
 
 
@@ -236,7 +247,7 @@ fn editorRefreshScreen() !void{
     try ab.appendSlice("\x1b[H");
     try editorDrawRows(&ab);
 
-    const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{(E.cy - E.rowoff) + 1, E.cx + 1});
+    const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{(E.cy - E.rowoff) + 1, (E.cx - E.coloff) + 1});
     defer allocator.free(cursorCommand); 
     try ab.appendSlice(cursorCommand);
 
@@ -350,6 +361,7 @@ pub fn initEditor() void{
     E.cx = 0;
     E.cy = 0;
     E.rowoff = 0;
+    E.coloff = 0;
     E.numrows = 0;
     if(getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
 }
