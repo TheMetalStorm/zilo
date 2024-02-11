@@ -173,7 +173,7 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void{
              
             if (len > E.screencols) len = E.screencols;
             
-
+            //todo: here
             try ab.appendSlice(E.rows.items[filerow].items);
         }
         try ab.appendSlice("\x1b[K");
@@ -233,7 +233,6 @@ fn editorAppendRow(content: []const u8) !void{
     try row.appendSlice(content);
     try E.rows.append(row);
     E.numrows += 1;
-
 }
 
 
