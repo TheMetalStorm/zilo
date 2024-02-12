@@ -114,9 +114,17 @@ fn editorProcessKeypress() void {
             E.cx = 0;
         },
         @intFromEnum(editorKey.END_KEY) => {
-            E.cx = E.screencols - 1;
+            if (E.cy < E.numrows)
+                E.cx = @truncate(E.rows.items[E.cy].rowData.items.len);
         },
         @intFromEnum(editorKey.PAGE_DOWN), @intFromEnum(editorKey.PAGE_UP) => {
+            if (ch == @intFromEnum(editorKey.PAGE_UP)) {
+                E.cy = E.rowoff;
+            } else if (ch == @intFromEnum(editorKey.PAGE_DOWN)) {
+                E.cy = E.rowoff + E.screenrows - 1;
+                if (E.cy > E.numrows) E.cy = E.numrows;
+            }
+
             var times: u32 = E.screenrows;
             while (times != 0) {
                 if (ch == @intFromEnum(editorKey.PAGE_UP)) {
@@ -147,7 +155,10 @@ fn editorOpen(filename: []const u8) !void {
 //output
 
 fn editorScroll() void {
-    E.rx = E.cx;
+    E.rx = 0;
+    if (E.cy < E.numrows) {
+        E.rx = editorRowCxToRx(&E.rows.items[E.cy].rowData, E.cx);
+    }
 
     if (E.cy < E.rowoff) {
         E.rowoff = E.cy;
@@ -240,6 +251,20 @@ fn getWindowSize(rows: *u32, cols: *u32) i2 {
         rows.* = ws.ws_row;
         return 0;
     }
+}
+
+fn editorRowCxToRx(row: *ArrayList(u8), cx: u32) u32 {
+    var rx: u32 = 0;
+
+    for (0..cx) |j| {
+        var ch = row.items[j];
+        if (ch == '\t') {
+            rx += (KILO_TAB_STOP - 1) - (rx % KILO_TAB_STOP);
+        }
+        rx += 1;
+    }
+
+    return rx;
 }
 
 fn editorUpdateRow(row: *erow) !void {
