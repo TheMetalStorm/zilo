@@ -8,7 +8,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "/home/simon/zilo/zig-out/bin/zilo",
-            "args": ["src/main.zig"],
+            "args": ["test"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
