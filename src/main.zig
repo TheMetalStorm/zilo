@@ -17,6 +17,22 @@ const c = @cImport({
 //enum
 const editorKey = enum(u32) { ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
 
+const erow = struct {
+    const Self = @This();
+
+    rowData: std.ArrayList(u8),
+    renderData: std.ArrayList(u8),
+
+    pub fn init(alloc: std.mem.Allocator) erow {
+        return .{ .rowData = std.ArrayList(u8).init(alloc), .renderData = std.ArrayList(u8).init(alloc) };
+    }
+
+    pub fn deinit(self: Self) void {
+        self.renderData.deinit();
+        self.rowData.deinit();
+    }
+};
+
 const editorConfig = struct {
     var orig_termios: c.termios = undefined;
     var cx: u32 = undefined;
@@ -26,7 +42,7 @@ const editorConfig = struct {
     var screenrows: u32 = undefined;
     var screencols: u32 = undefined;
     var numrows: u32 = undefined;
-    var rows: ArrayList(ArrayList(u8)) = undefined;
+    var rows: ArrayList(erow) = undefined;
 };
 
 const E = editorConfig;
@@ -47,15 +63,15 @@ fn editorMoveCursor(ch: u32) void {
                 E.cx -= 1;
             } else if (E.cy > 0) {
                 E.cy -= 1;
-                E.cx = @truncate(E.rows.items[E.cy].items.len);
+                E.cx = @truncate(E.rows.items[E.cy].rowData.items.len);
             }
         },
         @intFromEnum(editorKey.ARROW_RIGHT) => {
             if (E.cy < E.numrows) {
                 var row = E.rows.items[E.cy];
-                if (E.cx < row.items.len) {
+                if (E.cx < row.rowData.items.len) {
                     E.cx += 1;
-                } else if (E.cx == row.items.len) {
+                } else if (E.cx == row.rowData.items.len) {
                     E.cy += 1;
                     E.cx = 0;
                 }
@@ -76,7 +92,7 @@ fn editorMoveCursor(ch: u32) void {
 
     if (E.cy < E.numrows) {
         var row = E.rows.items[E.cy];
-        var rowlen = row.items.len;
+        var rowlen = row.rowData.items.len;
         if (E.cx > rowlen) {
             E.cx = @truncate(rowlen);
         }
@@ -166,14 +182,14 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void {
             }
         } else {
             var len: usize = 0;
-            if (E.coloff < E.rows.items[filerow].items.len) {
-                len = E.rows.items[filerow].items.len - E.coloff;
+            if (E.coloff < E.rows.items[filerow].rowData.items.len) {
+                len = E.rows.items[filerow].rowData.items.len - E.coloff;
             }
 
             if (len > E.screencols) len = E.screencols;
 
             if (len != 0)
-                try ab.appendSlice(E.rows.items[filerow].items[E.coloff .. E.coloff + len]);
+                try ab.appendSlice(E.rows.items[filerow].rowData.items[E.coloff .. E.coloff + len]);
         }
         try ab.appendSlice("\x1b[K");
 
@@ -224,8 +240,9 @@ fn getWindowSize(rows: *u32, cols: *u32) i2 {
 
 // row operations
 fn editorAppendRow(content: []const u8) !void {
-    var row = ArrayList(u8).init(allocator);
-    try row.appendSlice(content);
+    var row: erow = erow.init(allocator);
+    try row.rowData.appendSlice(content);
+    try row.renderData.appendSlice(content);
     try E.rows.append(row);
     E.numrows += 1;
 }
@@ -354,7 +371,7 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    var rows = ArrayList(ArrayList(u8)).init(allocator);
+    var rows = ArrayList(erow).init(allocator);
     E.rows = rows;
     defer deinitRows();
 
