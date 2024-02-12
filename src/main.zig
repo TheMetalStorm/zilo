@@ -37,6 +37,7 @@ const editorConfig = struct {
     var orig_termios: c.termios = undefined;
     var cx: u32 = undefined;
     var cy: u32 = undefined;
+    var rx: u32 = undefined;
     var rowoff: u32 = undefined;
     var coloff: u32 = undefined;
     var screenrows: u32 = undefined;
@@ -50,6 +51,7 @@ const E = editorConfig;
 const stdin = std.io.getStdIn().reader();
 const stdout = std.io.getStdOut().writer();
 const ZILO_VERSION = "0.0.1";
+const KILO_TAB_STOP = 8;
 
 //input
 fn CTRL_KEY(k: u8) u8 {
@@ -145,6 +147,8 @@ fn editorOpen(filename: []const u8) !void {
 //output
 
 fn editorScroll() void {
+    E.rx = E.cx;
+
     if (E.cy < E.rowoff) {
         E.rowoff = E.cy;
     }
@@ -152,11 +156,11 @@ fn editorScroll() void {
         E.rowoff = E.cy - E.screenrows + 1;
     }
 
-    if (E.cx < E.coloff) {
-        E.coloff = E.cx;
+    if (E.rx < E.coloff) {
+        E.coloff = E.rx;
     }
-    if (E.cx >= E.coloff + E.screencols) {
-        E.coloff = E.cx - E.screencols + 1;
+    if (E.rx >= E.coloff + E.screencols) {
+        E.coloff = E.rx - E.screencols + 1;
     }
 }
 
@@ -238,15 +242,22 @@ fn getWindowSize(rows: *u32, cols: *u32) i2 {
     }
 }
 
-fn editorUpdateRow(row: *erow) void {
-    row.renderData = row.rowData;
+fn editorUpdateRow(row: *erow) !void {
+    row.renderData.clearAndFree();
+    for (row.rowData.items) |ch| {
+        if (ch == '\t') {
+            for (0..KILO_TAB_STOP) |_| {
+                try row.renderData.append(' ');
+            }
+        } else try row.renderData.append(ch);
+    }
 }
 
 // row operations
 fn editorAppendRow(content: []const u8) !void {
     var row: erow = erow.init(allocator);
     try row.rowData.appendSlice(content);
-    editorUpdateRow(&row);
+    try editorUpdateRow(&row);
     try E.rows.append(row);
     E.numrows += 1;
 }
@@ -261,7 +272,7 @@ fn editorRefreshScreen() !void {
     try ab.appendSlice("\x1b[H");
     try editorDrawRows(&ab);
 
-    const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{ (E.cy - E.rowoff) + 1, (E.cx - E.coloff) + 1 });
+    const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{ (E.cy - E.rowoff) + 1, (E.rx - E.coloff) + 1 });
     defer allocator.free(cursorCommand);
     try ab.appendSlice(cursorCommand);
 
@@ -366,6 +377,7 @@ fn die(str: []const u8) void {
 pub fn initEditor() void {
     E.cx = 0;
     E.cy = 0;
+    E.rx = 0;
     E.rowoff = 0;
     E.coloff = 0;
     E.numrows = 0;
