@@ -45,10 +45,21 @@ fn editorMoveCursor(ch: u32) void {
         @intFromEnum(editorKey.ARROW_LEFT) => {
             if (E.cx != 0) {
                 E.cx -= 1;
+            } else if (E.cy > 0) {
+                E.cy -= 1;
+                E.cx = @truncate(E.rows.items[E.cy].items.len);
             }
         },
         @intFromEnum(editorKey.ARROW_RIGHT) => {
-            E.cx += 1;
+            if (E.cy < E.numrows) {
+                var row = E.rows.items[E.cy];
+                if (E.cx < row.items.len) {
+                    E.cx += 1;
+                } else if (E.cx == row.items.len) {
+                    E.cy += 1;
+                    E.cx = 0;
+                }
+            }
         },
         @intFromEnum(editorKey.ARROW_UP) => {
             if (E.cy != 0) {
@@ -61,6 +72,14 @@ fn editorMoveCursor(ch: u32) void {
             }
         },
         else => {},
+    }
+
+    if (E.cy < E.numrows) {
+        var row = E.rows.items[E.cy];
+        var rowlen = row.items.len;
+        if (E.cx > rowlen) {
+            E.cx = @truncate(rowlen);
+        }
     }
 }
 
