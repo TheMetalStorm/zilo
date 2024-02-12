@@ -182,14 +182,14 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void {
             }
         } else {
             var len: usize = 0;
-            if (E.coloff < E.rows.items[filerow].rowData.items.len) {
-                len = E.rows.items[filerow].rowData.items.len - E.coloff;
+            if (E.coloff < E.rows.items[filerow].renderData.items.len) {
+                len = E.rows.items[filerow].renderData.items.len - E.coloff;
             }
 
             if (len > E.screencols) len = E.screencols;
 
             if (len != 0)
-                try ab.appendSlice(E.rows.items[filerow].rowData.items[E.coloff .. E.coloff + len]);
+                try ab.appendSlice(E.rows.items[filerow].renderData.items[E.coloff .. E.coloff + len]);
         }
         try ab.appendSlice("\x1b[K");
 
@@ -238,11 +238,15 @@ fn getWindowSize(rows: *u32, cols: *u32) i2 {
     }
 }
 
+fn editorUpdateRow(row: *erow) void {
+    row.renderData = row.rowData;
+}
+
 // row operations
 fn editorAppendRow(content: []const u8) !void {
     var row: erow = erow.init(allocator);
     try row.rowData.appendSlice(content);
-    try row.renderData.appendSlice(content);
+    editorUpdateRow(&row);
     try E.rows.append(row);
     E.numrows += 1;
 }
