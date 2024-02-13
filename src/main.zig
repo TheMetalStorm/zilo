@@ -207,11 +207,18 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void {
                 try ab.appendSlice(E.rows.items[filerow].renderData.items[E.coloff .. E.coloff + len]);
         }
         try ab.appendSlice("\x1b[K");
-
-        if (y < E.screenrows - 1) {
-            try ab.appendSlice("\r\n");
-        }
+        try ab.appendSlice("\r\n");
     }
+}
+
+fn editorDrawStatusBar(ab: *ArrayList(u8)) !void {
+    try ab.appendSlice("\x1b[7m");
+    var len: u32 = 0;
+    while (len < E.screencols) {
+        try ab.appendSlice(" ");
+        len += 1;
+    }
+    try ab.appendSlice("\x1b[m");
 }
 
 //terminal
@@ -296,7 +303,7 @@ fn editorRefreshScreen() !void {
     try ab.appendSlice("\x1b[?25l");
     try ab.appendSlice("\x1b[H");
     try editorDrawRows(&ab);
-
+    try editorDrawStatusBar(&ab);
     const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{ (E.cy - E.rowoff) + 1, (E.rx - E.coloff) + 1 });
     defer allocator.free(cursorCommand);
     try ab.appendSlice(cursorCommand);
@@ -407,6 +414,7 @@ pub fn initEditor() void {
     E.coloff = 0;
     E.numrows = 0;
     if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
+    E.screenrows -= 1;
 }
 pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
