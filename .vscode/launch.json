@@ -3,12 +3,13 @@
     "version": "0.2.0",
     
     "configurations": [
+
         {
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
             "program": "/home/simon/zilo/zig-out/bin/zilo",
-            "args": ["test"],
+            "args": ["src/main.zig"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

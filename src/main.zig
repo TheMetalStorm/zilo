@@ -44,6 +44,7 @@ const editorConfig = struct {
     var screencols: u32 = undefined;
     var numrows: u32 = undefined;
     var rows: ArrayList(erow) = undefined;
+    var filename: ArrayList(u8) = undefined;
 };
 
 const E = editorConfig;
@@ -144,6 +145,12 @@ fn editorProcessKeypress() void {
 
 //file i/o
 fn editorOpen(filename: []const u8) !void {
+    E.filename.deinit();
+
+    for (filename) |ch| {
+        try E.filename.append(ch);
+    }
+
     var file = try std.fs.cwd().openFile(filename, .{});
     defer file.close();
 
@@ -213,10 +220,29 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void {
 
 fn editorDrawStatusBar(ab: *ArrayList(u8)) !void {
     try ab.appendSlice("\x1b[7m");
-    var len: u32 = 0;
+    var filename: ArrayList(u8) = ArrayList(u8).init(allocator);
+    defer filename.deinit();
+
+    if (E.filename.items.len != 0) {
+        filename.items = E.filename.items;
+    } else {
+        var a = "[No Name]".*;
+        filename.items = &a;
+    }
+    const rstatus = try std.fmt.allocPrint(allocator, "{d}/{d}", .{ E.cy + 1, E.numrows });
+    const status = try std.fmt.allocPrint(allocator, "{s} - {d} lines", .{ filename.items, E.numrows });
+    var len = status.len;
+    if (len > E.screencols) len = E.screencols;
+    try ab.appendSlice(status);
+
     while (len < E.screencols) {
-        try ab.appendSlice(" ");
-        len += 1;
+        if (E.screencols - len == rstatus.len) {
+            try ab.appendSlice(rstatus);
+            break;
+        } else {
+            try ab.appendSlice(" ");
+            len += 1;
+        }
     }
     try ab.appendSlice("\x1b[m");
 }
@@ -415,17 +441,18 @@ pub fn initEditor() void {
     E.numrows = 0;
     if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
     E.screenrows -= 1;
+    var rows = ArrayList(erow).init(allocator);
+    var filename = ArrayList(u8).init(allocator);
+    E.rows = rows;
+    E.filename = filename;
 }
 pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    var rows = ArrayList(erow).init(allocator);
-    E.rows = rows;
-    defer deinitRows();
-
     enableRawMode();
     initEditor();
+    defer deinitEditor();
 
     if (args.len >= 2) {
         try editorOpen(args[1]);
@@ -436,10 +463,10 @@ pub fn main() !void {
     }
 }
 
-fn deinitRows() void {
+fn deinitEditor() void {
     for (E.rows.items) |*array_list| {
         array_list.deinit();
     }
 
-    E.rows.deinit();
+    E.filename.deinit();
 }
