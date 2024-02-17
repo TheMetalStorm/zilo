@@ -2,6 +2,7 @@
 const std = @import("std");
 const ascii = std.ascii;
 const print = std.debug.print;
+const time = std.time;
 const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
@@ -45,6 +46,8 @@ const editorConfig = struct {
     var numrows: u32 = undefined;
     var rows: ArrayList(erow) = undefined;
     var filename: ArrayList(u8) = undefined;
+    var statusmsg: ArrayList(u8) = undefined;
+    var statusmsg_time: i64 = undefined;
 };
 
 const E = editorConfig;
@@ -224,11 +227,11 @@ fn editorDrawStatusBar(ab: *ArrayList(u8)) !void {
     defer filename.deinit();
 
     if (E.filename.items.len != 0) {
-        filename.items = E.filename.items;
+        filename = try E.filename.clone();
     } else {
-        var a = "[No Name]".*;
-        filename.items = &a;
+        try filename.appendSlice("[No Name]");
     }
+
     const rstatus = try std.fmt.allocPrint(allocator, "{d}/{d}", .{ E.cy + 1, E.numrows });
     const status = try std.fmt.allocPrint(allocator, "{s} - {d} lines", .{ filename.items, E.numrows });
     var len = status.len;
@@ -245,6 +248,18 @@ fn editorDrawStatusBar(ab: *ArrayList(u8)) !void {
         }
     }
     try ab.appendSlice("\x1b[m");
+    try ab.appendSlice("\r\n");
+}
+
+fn editorDrawMessageBar(ab: *ArrayList(u8)) !void {
+    try ab.appendSlice("\x1b[K");
+    var msglen: u32 = @truncate(E.statusmsg.items.len);
+    if (msglen > E.screencols) msglen = E.screencols;
+    if (msglen != 0) {
+        if (time.timestamp() - E.statusmsg_time < 5) {
+            try ab.appendSlice(E.statusmsg.items);
+        }
+    }
 }
 
 //terminal
@@ -330,6 +345,7 @@ fn editorRefreshScreen() !void {
     try ab.appendSlice("\x1b[H");
     try editorDrawRows(&ab);
     try editorDrawStatusBar(&ab);
+    try editorDrawMessageBar(&ab);
     const cursorCommand = try std.fmt.allocPrint(allocator, "\x1b[{d};{d}H", .{ (E.cy - E.rowoff) + 1, (E.rx - E.coloff) + 1 });
     defer allocator.free(cursorCommand);
     try ab.appendSlice(cursorCommand);
@@ -339,6 +355,14 @@ fn editorRefreshScreen() !void {
     for (ab.items) |value| {
         std.debug.print("{c}", .{value});
     }
+}
+
+fn editorSetStatusMessage(comptime fmt: []const u8, args: anytype) !void {
+    var buffer: [256]u8 = undefined;
+    const message = try std.fmt.bufPrint(&buffer, fmt, args);
+    E.statusmsg.deinit();
+    try E.statusmsg.appendSlice(message);
+    E.statusmsg_time = time.timestamp();
 }
 
 fn editorReadKey() u32 {
@@ -440,11 +464,14 @@ pub fn initEditor() void {
     E.coloff = 0;
     E.numrows = 0;
     if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
-    E.screenrows -= 1;
+    E.screenrows -= 2;
     var rows = ArrayList(erow).init(allocator);
     var filename = ArrayList(u8).init(allocator);
+    var statusmsg = ArrayList(u8).init(allocator);
     E.rows = rows;
     E.filename = filename;
+    E.statusmsg = statusmsg;
+    E.statusmsg_time = 0;
 }
 pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
@@ -457,6 +484,9 @@ pub fn main() !void {
     if (args.len >= 2) {
         try editorOpen(args[1]);
     }
+
+    try editorSetStatusMessage("HELP: Ctrl-Q = quit", .{});
+
     while (true) {
         try editorRefreshScreen();
         editorProcessKeypress();
