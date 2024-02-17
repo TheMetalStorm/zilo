@@ -16,7 +16,7 @@ const c = @cImport({
 });
 
 //enum
-const editorKey = enum(u32) { ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
+const editorKey = enum(u32) { BACKSPACE = 127, ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
 
 const erow = struct {
     const Self = @This();
@@ -105,9 +105,12 @@ fn editorMoveCursor(ch: u32) void {
     }
 }
 
-fn editorProcessKeypress() void {
+fn editorProcessKeypress() !void {
     var ch: u32 = editorReadKey();
     switch (ch) {
+        '\r' => {
+            //TODO
+        },
         CTRL_KEY('q') => {
             print("{s}", .{"\x1b[2J"});
             print("{s}", .{"\x1b[H"});
@@ -120,6 +123,10 @@ fn editorProcessKeypress() void {
         @intFromEnum(editorKey.END_KEY) => {
             if (E.cy < E.numrows)
                 E.cx = @truncate(E.rows.items[E.cy].rowData.items.len);
+        },
+
+        @intFromEnum(editorKey.BACKSPACE), CTRL_KEY('h'), @intFromEnum(editorKey.DEL_KEY) => {
+            //TODO
         },
         @intFromEnum(editorKey.PAGE_DOWN), @intFromEnum(editorKey.PAGE_UP) => {
             if (ch == @intFromEnum(editorKey.PAGE_UP)) {
@@ -142,7 +149,17 @@ fn editorProcessKeypress() void {
         @intFromEnum(editorKey.ARROW_UP), @intFromEnum(editorKey.ARROW_DOWN), @intFromEnum(editorKey.ARROW_LEFT), @intFromEnum(editorKey.ARROW_RIGHT) => {
             editorMoveCursor(ch);
         },
-        else => {},
+        CTRL_KEY('l') => {
+            //TODO
+        },
+        '\x1b' => {
+            //TODO
+        },
+
+        else => {
+            if (ch != 0)
+                try editorInsertChar(@truncate(ch));
+        },
     }
 }
 
@@ -254,7 +271,8 @@ fn editorDrawStatusBar(ab: *ArrayList(u8)) !void {
 fn editorDrawMessageBar(ab: *ArrayList(u8)) !void {
     try ab.appendSlice("\x1b[K");
     var msglen: u32 = @truncate(E.statusmsg.items.len);
-    if (msglen > E.screencols) msglen = E.screencols;
+    if (msglen > E.screencols)
+        msglen = E.screencols;
     if (msglen != 0) {
         if (time.timestamp() - E.statusmsg_time < 5) {
             try ab.appendSlice(E.statusmsg.items);
@@ -333,6 +351,22 @@ fn editorAppendRow(content: []const u8) !void {
     try editorUpdateRow(&row);
     try E.rows.append(row);
     E.numrows += 1;
+}
+
+fn editorRowInsertChar(row: *erow, at: u32, ch: u8) !void {
+    var insertPos = at;
+    if (insertPos < 0) insertPos = @truncate(row.rowData.items.len);
+    if (insertPos > row.rowData.items.len) insertPos = @truncate(row.rowData.items.len);
+    try row.rowData.insert(insertPos, ch);
+    try editorUpdateRow(row);
+}
+
+fn editorInsertChar(ch: u8) !void {
+    if (E.cy == E.numrows) {
+        try editorAppendRow("");
+    }
+    try editorRowInsertChar(&E.rows.items[E.cy], E.cx, ch);
+    E.cx += 1;
 }
 
 fn editorRefreshScreen() !void {
@@ -489,7 +523,7 @@ pub fn main() !void {
 
     while (true) {
         try editorRefreshScreen();
-        editorProcessKeypress();
+        try editorProcessKeypress();
     }
 }
 
