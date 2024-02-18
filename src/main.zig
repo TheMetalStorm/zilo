@@ -1,4 +1,4 @@
-//bbaaimport/include
+//import/include
 const std = @import("std");
 const ascii = std.ascii;
 const print = std.debug.print;
@@ -200,9 +200,14 @@ fn editorSave() !void {
     defer allRows.deinit();
 
     var file = try std.fs.cwd().openFile(E.filename.items, .{ .mode = std.fs.File.OpenMode.write_only });
+
     defer file.close();
 
-    _ = try file.write(allRows.items);
+    if (file.write(allRows.items)) |bytes| {
+        try editorSetStatusMessage("{d} bytes written to disk", .{bytes});
+    } else |err| {
+        try editorSetStatusMessage("Can't save! I/O error: {}", .{err});
+    }
 }
 //output
 
@@ -419,7 +424,7 @@ fn editorRefreshScreen() !void {
 fn editorSetStatusMessage(comptime fmt: []const u8, args: anytype) !void {
     var buffer: [256]u8 = undefined;
     const message = try std.fmt.bufPrint(&buffer, fmt, args);
-    E.statusmsg.deinit();
+    E.statusmsg.clearRetainingCapacity();
     try E.statusmsg.appendSlice(message);
     E.statusmsg_time = time.timestamp();
 }
@@ -546,7 +551,7 @@ pub fn main() !void {
         try editorOpen(args[1]);
     }
 
-    try editorSetStatusMessage("HELP: Ctrl-Q = quit", .{});
+    try editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit", .{});
 
     while (true) {
         try editorRefreshScreen();
