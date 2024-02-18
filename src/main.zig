@@ -1,4 +1,4 @@
-//import/include
+//bbaaimport/include
 const std = @import("std");
 const ascii = std.ascii;
 const print = std.debug.print;
@@ -117,6 +117,9 @@ fn editorProcessKeypress() !void {
 
             c.exit(0);
         },
+        CTRL_KEY('s') => {
+            try editorSave();
+        },
         @intFromEnum(editorKey.HOME_KEY) => {
             E.cx = 0;
         },
@@ -164,6 +167,15 @@ fn editorProcessKeypress() !void {
 }
 
 //file i/o
+
+fn editorRowsToString() !ArrayList(u8) {
+    var allLines: ArrayList(u8) = ArrayList(u8).init(allocator);
+    for (0..E.numrows) |i| {
+        try allLines.appendSlice(E.rows.items[i].rowData.items);
+        try allLines.append('\n');
+    }
+    return allLines;
+}
 fn editorOpen(filename: []const u8) !void {
     E.filename.deinit();
 
@@ -178,6 +190,18 @@ fn editorOpen(filename: []const u8) !void {
     while (try file.reader().readUntilDelimiterOrEof(buf[0..], '\n')) |line| {
         try editorAppendRow(line);
     }
+}
+
+fn editorSave() !void {
+    if (E.filename.items.len == 0) return;
+
+    var allRows: ArrayList(u8) = try editorRowsToString();
+    defer allRows.deinit();
+
+    var file = try std.fs.cwd().openFile(E.filename.items, .{ .mode = std.fs.File.OpenMode.write_only });
+    defer file.close();
+
+    _ = try file.write(allRows.items);
 }
 //output
 
