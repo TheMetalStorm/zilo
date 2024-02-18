@@ -73,7 +73,7 @@ fn editorMoveCursor(ch: u32) void {
             }
         },
         @intFromEnum(editorKey.ARROW_RIGHT) => {
-            if (E.cy < E.numrows) {
+            if (E.cy >= E.numrows) {} else {
                 var row = E.rows.items[E.cy];
                 if (E.cx < row.rowData.items.len) {
                     E.cx += 1;
@@ -96,12 +96,13 @@ fn editorMoveCursor(ch: u32) void {
         else => {},
     }
 
+    var rowlen: usize = 0;
     if (E.cy < E.numrows) {
         var row = E.rows.items[E.cy];
-        var rowlen = row.rowData.items.len;
-        if (E.cx > rowlen) {
-            E.cx = @truncate(rowlen);
-        }
+        rowlen = row.rowData.items.len;
+    }
+    if (E.cx > rowlen) {
+        E.cx = @truncate(rowlen);
     }
 }
 
@@ -492,6 +493,7 @@ fn enableRawMode() void {
     }
 
     _ = c.atexit(disableRawMode);
+
     var raw: c.termios = E.orig_termios;
 
     raw.c_iflag &= ~(@as(c_uint, c.BRKINT) | @as(c_uint, c.ICRNL) | @as(c_uint, c.INPCK) | @as(c_uint, c.ISTRIP) | @as(c_uint, c.IXON));
@@ -536,6 +538,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     enableRawMode();
+    errdefer disableRawMode();
     initEditor();
     defer deinitEditor();
 
