@@ -45,6 +45,7 @@ const editorConfig = struct {
     var screencols: u32 = undefined;
     var numrows: u32 = undefined;
     var rows: ArrayList(erow) = undefined;
+    var dirty: u32 = undefined;
     var filename: ArrayList(u8) = undefined;
     var statusmsg: ArrayList(u8) = undefined;
     var statusmsg_time: i64 = undefined;
@@ -56,6 +57,7 @@ const stdin = std.io.getStdIn().reader();
 const stdout = std.io.getStdOut().writer();
 const ZILO_VERSION = "0.0.1";
 const KILO_TAB_STOP = 8;
+const KILO_QUIT_TIMES = 3;
 
 //input
 fn CTRL_KEY(k: u8) u8 {
@@ -107,16 +109,36 @@ fn editorMoveCursor(ch: u32) void {
 }
 
 fn editorProcessKeypress() !void {
+    const state = struct {
+        var quit_times: u32 = KILO_QUIT_TIMES;
+    };
+    var pressedQuit: bool = false;
+
     var ch: u32 = editorReadKey();
+    if (ch == 0) return;
     switch (ch) {
         '\r' => {
             //TODO
+
         },
         CTRL_KEY('q') => {
-            print("{s}", .{"\x1b[2J"});
-            print("{s}", .{"\x1b[H"});
-
-            c.exit(0);
+            //FIXME: is a mess
+            pressedQuit = true;
+            if (E.dirty != 0) {
+                if (state.quit_times > 0) {
+                    try editorSetStatusMessage("WARNING!!! File has unsaved changes. Press Ctrl-Q {d} more times to quit.", .{state.quit_times});
+                    state.quit_times -= 1;
+                    return;
+                } else {
+                    print("{s}", .{"\x1b[2J"});
+                    print("{s}", .{"\x1b[H"});
+                    c.exit(0);
+                }
+            } else {
+                print("{s}", .{"\x1b[2J"});
+                print("{s}", .{"\x1b[H"});
+                c.exit(0);
+            }
         },
         CTRL_KEY('s') => {
             try editorSave();
@@ -131,6 +153,7 @@ fn editorProcessKeypress() !void {
 
         @intFromEnum(editorKey.BACKSPACE), CTRL_KEY('h'), @intFromEnum(editorKey.DEL_KEY) => {
             //TODO
+
         },
         @intFromEnum(editorKey.PAGE_DOWN), @intFromEnum(editorKey.PAGE_UP) => {
             if (ch == @intFromEnum(editorKey.PAGE_UP)) {
@@ -155,15 +178,19 @@ fn editorProcessKeypress() !void {
         },
         CTRL_KEY('l') => {
             //TODO
+
         },
         '\x1b' => {
             //TODO
+
         },
 
         else => {
-            if (ch != 0)
-                try editorInsertChar(@truncate(ch));
+            try editorInsertChar(@truncate(ch));
         },
+    }
+    if (pressedQuit == false) {
+        state.quit_times = KILO_QUIT_TIMES;
     }
 }
 
@@ -191,6 +218,8 @@ fn editorOpen(filename: []const u8) !void {
     while (try file.reader().readUntilDelimiterOrEof(buf[0..], '\n')) |line| {
         try editorAppendRow(line);
     }
+
+    E.dirty = 0;
 }
 
 fn editorSave() !void {
@@ -205,6 +234,7 @@ fn editorSave() !void {
 
     if (file.write(allRows.items)) |bytes| {
         try editorSetStatusMessage("{d} bytes written to disk", .{bytes});
+        E.dirty = 0;
     } else |err| {
         try editorSetStatusMessage("Can't save! I/O error: {}", .{err});
     }
@@ -279,8 +309,10 @@ fn editorDrawStatusBar(ab: *ArrayList(u8)) !void {
         try filename.appendSlice("[No Name]");
     }
 
+    var modifiedText = if (E.dirty != 0) "(modified)" else "";
+
     const rstatus = try std.fmt.allocPrint(allocator, "{d}/{d}", .{ E.cy + 1, E.numrows });
-    const status = try std.fmt.allocPrint(allocator, "{s} - {d} lines", .{ filename.items, E.numrows });
+    const status = try std.fmt.allocPrint(allocator, "{s} - {d} lines {s}", .{ filename.items, E.numrows, modifiedText });
     var len = status.len;
     if (len > E.screencols) len = E.screencols;
     try ab.appendSlice(status);
@@ -381,6 +413,7 @@ fn editorAppendRow(content: []const u8) !void {
     try editorUpdateRow(&row);
     try E.rows.append(row);
     E.numrows += 1;
+    E.dirty += 1;
 }
 
 fn editorRowInsertChar(row: *erow, at: u32, ch: u8) !void {
@@ -389,6 +422,7 @@ fn editorRowInsertChar(row: *erow, at: u32, ch: u8) !void {
     if (insertPos > row.rowData.items.len) insertPos = @truncate(row.rowData.items.len);
     try row.rowData.insert(insertPos, ch);
     try editorUpdateRow(row);
+    E.dirty += 1;
 }
 
 fn editorInsertChar(ch: u8) !void {
@@ -528,6 +562,7 @@ pub fn initEditor() void {
     E.rowoff = 0;
     E.coloff = 0;
     E.numrows = 0;
+    E.dirty = 0;
     if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
     E.screenrows -= 2;
     var rows = ArrayList(erow).init(allocator);
