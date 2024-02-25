@@ -217,7 +217,7 @@ fn editorOpen(filename: []const u8) !void {
 
     var buf: [1000]u8 = undefined;
     while (try file.reader().readUntilDelimiterOrEof(buf[0..], '\n')) |line| {
-        try editorAppendRow(line);
+        try editorInsertRow(E.numrows, line);
     }
 
     E.dirty = 0;
@@ -408,11 +408,15 @@ fn editorUpdateRow(row: *erow) !void {
 }
 
 // row operations
-fn editorAppendRow(content: []const u8) !void {
+fn editorInsertRow(at: u32, content: []const u8) !void {
+    if (at > E.numrows) return;
+    if (at < 0) return;
+
     var row: erow = erow.init(allocator);
     try row.rowData.appendSlice(content);
     try editorUpdateRow(&row);
-    try E.rows.append(row);
+
+    try E.rows.insert(at, row);
     E.numrows += 1;
     E.dirty += 1;
 }
@@ -461,7 +465,7 @@ fn editorRowDelChar(row: *erow, at: u32) !void {
 
 fn editorInsertChar(ch: u8) !void {
     if (E.cy == E.numrows) {
-        try editorAppendRow("");
+        try editorInsertRow(E.numrows, "");
     }
     try editorRowInsertChar(&E.rows.items[E.cy], E.cx, ch);
     E.cx += 1;
