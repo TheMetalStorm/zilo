@@ -152,8 +152,9 @@ fn editorProcessKeypress() !void {
         },
 
         @intFromEnum(editorKey.BACKSPACE), CTRL_KEY('h'), @intFromEnum(editorKey.DEL_KEY) => {
-            //TODO
-
+            if (ch == @intFromEnum(editorKey.DEL_KEY))
+                editorMoveCursor(@intFromEnum(editorKey.ARROW_RIGHT));
+            try editorDelChar();
         },
         @intFromEnum(editorKey.PAGE_DOWN), @intFromEnum(editorKey.PAGE_UP) => {
             if (ch == @intFromEnum(editorKey.PAGE_UP)) {
@@ -416,11 +417,44 @@ fn editorAppendRow(content: []const u8) !void {
     E.dirty += 1;
 }
 
+fn editorFreeRow(row: *erow) void {
+    row.rowData.deinit();
+    row.renderData.deinit();
+}
+
+fn editorDelRow(at: u32) !void {
+    if (at < 0) return;
+    if (at >= E.numrows) return;
+
+    editorFreeRow(&E.rows.items[at]);
+    _ = E.rows.orderedRemove(at);
+
+    E.numrows -= 1;
+    E.dirty += 1;
+}
+
 fn editorRowInsertChar(row: *erow, at: u32, ch: u8) !void {
     var insertPos = at;
     if (insertPos < 0) insertPos = @truncate(row.rowData.items.len);
     if (insertPos > row.rowData.items.len) insertPos = @truncate(row.rowData.items.len);
     try row.rowData.insert(insertPos, ch);
+    try editorUpdateRow(row);
+    E.dirty += 1;
+}
+
+fn editorRowAppendString(row: *erow, append: []const u8) !void {
+    try row.rowData.appendSlice(append);
+
+    try editorUpdateRow(row);
+    E.dirty += 1;
+}
+
+fn editorRowDelChar(row: *erow, at: u32) !void {
+    if (at < 0) return;
+    if (at >= row.rowData.items.len) return;
+
+    _ = row.rowData.orderedRemove(at);
+
     try editorUpdateRow(row);
     E.dirty += 1;
 }
@@ -431,6 +465,27 @@ fn editorInsertChar(ch: u8) !void {
     }
     try editorRowInsertChar(&E.rows.items[E.cy], E.cx, ch);
     E.cx += 1;
+}
+
+fn editorDelChar() !void {
+    if (E.cy == E.numrows) return;
+    if (E.cx == 0) {
+        if (E.cy == 0) {
+            return;
+        }
+    }
+
+    var row = &E.rows.items[E.cy];
+
+    if (E.cx > 0) {
+        try editorRowDelChar(row, E.cx - 1);
+        E.cx -= 1;
+    } else {
+        E.cx = @truncate(E.rows.items[E.cy - 1].rowData.items.len);
+        try editorRowAppendString(&E.rows.items[E.cy - 1], row.rowData.items);
+        try editorDelRow(E.cy);
+        E.cy -= 1;
+    }
 }
 
 fn editorRefreshScreen() !void {
