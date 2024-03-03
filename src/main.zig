@@ -60,6 +60,33 @@ const KILO_TAB_STOP = 8;
 const KILO_QUIT_TIMES = 3;
 
 //input
+
+fn editorPrompt(comptime prompt: []const u8) !?ArrayList(u8) {
+    var buf = ArrayList(u8).init(allocator);
+    while (true) {
+        try editorSetStatusMessage(prompt, .{buf.items});
+        try editorRefreshScreen();
+        var ch: u32 = editorReadKey();
+        if (ch != 0) {
+            if (ch == @intFromEnum(editorKey.DEL_KEY) or ch == CTRL_KEY('h') or ch == @intFromEnum(editorKey.BACKSPACE)) {
+                if (buf.items.len != 0) {
+                    try buf.resize(buf.items.len - 1);
+                }
+            } else if (ch == '\x1b') {
+                try editorSetStatusMessage("", .{});
+                return null;
+            } else if (ch == '\r') {
+                if (buf.items.len != 0) {
+                    try editorSetStatusMessage("", .{});
+                    return buf;
+                }
+            } else if (ch > 32 and ch < 128) {
+                try buf.append(@truncate(ch));
+            }
+        }
+    }
+}
+
 fn CTRL_KEY(k: u8) u8 {
     return (k) & 0x1f;
 }
@@ -118,8 +145,7 @@ fn editorProcessKeypress() !void {
     if (ch == 0) return;
     switch (ch) {
         '\r' => {
-            //TODO
-
+            try editorInsertNewline();
         },
         CTRL_KEY('q') => {
             //FIXME: is a mess
@@ -224,12 +250,25 @@ fn editorOpen(filename: []const u8) !void {
 }
 
 fn editorSave() !void {
-    if (E.filename.items.len == 0) return;
+    if (E.filename.items.len == 0) {
+        if (try editorPrompt("Save as: {s} (ESC to cancel)")) |result| {
+            E.filename.deinit();
+            E.filename = result;
+        } else {
+            try editorSetStatusMessage("Save aborted", .{});
+            return;
+        }
+    }
 
     var allRows: ArrayList(u8) = try editorRowsToString();
     defer allRows.deinit();
 
-    var file = try std.fs.cwd().openFile(E.filename.items, .{ .mode = std.fs.File.OpenMode.write_only });
+    var file = std.fs.cwd().openFile(E.filename.items, .{ .mode = std.fs.File.OpenMode.write_only }) catch |e| blk: {
+        if (e == error.FileNotFound) {
+            break :blk try std.fs.cwd().createFile(E.filename.items, .{ .read = false });
+        }
+        return e;
+    };
 
     defer file.close();
 
@@ -444,6 +483,22 @@ fn editorRowInsertChar(row: *erow, at: u32, ch: u8) !void {
     try row.rowData.insert(insertPos, ch);
     try editorUpdateRow(row);
     E.dirty += 1;
+}
+
+fn editorInsertNewline() !void {
+    if (E.cx == 0) {
+        try editorInsertRow(E.cy, "");
+    } else {
+        var row = &E.rows.items[E.cy];
+        var end = row.rowData.items.len;
+        try editorInsertRow(E.cy + 1, row.rowData.items[E.cx..@truncate(end)]);
+
+        try row.rowData.resize(E.cx);
+
+        try editorUpdateRow(row);
+    }
+    E.cy += 1;
+    E.cx = 0;
 }
 
 fn editorRowAppendString(row: *erow, append: []const u8) !void {
