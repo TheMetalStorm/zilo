@@ -436,11 +436,15 @@ fn editorRowCxToRx(row: *ArrayList(u8), cx: u32) u32 {
 }
 
 fn editorUpdateRow(row: *erow) !void {
+    //TODO: possible bug for Tabs here? looks very different in c
     row.renderData.clearAndFree();
     for (row.rowData.items) |ch| {
         if (ch == '\t') {
-            for (0..KILO_TAB_STOP) |_| {
+            try row.renderData.append(' ');
+            var curLen = row.renderData.items.len;
+            while (curLen % KILO_TAB_STOP != 0) {
                 try row.renderData.append(' ');
+                curLen += 1;
             }
         } else try row.renderData.append(ch);
     }
@@ -448,8 +452,7 @@ fn editorUpdateRow(row: *erow) !void {
 
 // row operations
 fn editorInsertRow(at: u32, content: []const u8) !void {
-    if (at > E.numrows) return;
-    if (at < 0) return;
+    if (at > E.numrows or at < 0) return;
 
     var row: erow = erow.init(allocator);
     try row.rowData.appendSlice(content);
@@ -478,8 +481,7 @@ fn editorDelRow(at: u32) !void {
 
 fn editorRowInsertChar(row: *erow, at: u32, ch: u8) !void {
     var insertPos = at;
-    if (insertPos < 0) insertPos = @truncate(row.rowData.items.len);
-    if (insertPos > row.rowData.items.len) insertPos = @truncate(row.rowData.items.len);
+    if (insertPos < 0 or insertPos > row.rowData.items.len) insertPos = @truncate(row.rowData.items.len);
     try row.rowData.insert(insertPos, ch);
     try editorUpdateRow(row);
     E.dirty += 1;
