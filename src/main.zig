@@ -4,6 +4,7 @@ const ascii = std.ascii;
 const print = std.debug.print;
 const time = std.time;
 const ArrayList = std.ArrayList;
+const builtin = std.builtin;
 const allocator = std.heap.page_allocator;
 const c = @cImport({
     @cInclude("termios.h");
@@ -700,6 +701,7 @@ fn enableRawMode() void {
 }
 
 fn die(str: []const u8) void {
+    disableRawMode();
     print("{s}", .{"\x1b[2J"});
     print("{s}", .{"\x1b[H"});
 
@@ -732,10 +734,8 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     enableRawMode();
-    errdefer disableRawMode();
     initEditor();
     defer deinitEditor();
-
     if (args.len >= 2) {
         try editorOpen(args[1]);
     }
@@ -746,6 +746,13 @@ pub fn main() !void {
         try editorRefreshScreen();
         try editorProcessKeypress();
     }
+}
+
+pub fn panic(msg: []const u8, error_return_trace: ?*builtin.StackTrace, ret_addr: ?usize) noreturn {
+    @setCold(true);
+    disableRawMode();
+    const first_trace_addr = ret_addr orelse @returnAddress();
+    std.debug.panicImpl(error_return_trace, first_trace_addr, msg);
 }
 
 fn deinitEditor() void {
