@@ -5,7 +5,6 @@ const print = std.debug.print;
 const time = std.time;
 const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
-
 const c = @cImport({
     @cInclude("termios.h");
     @cInclude("unistd.h");
@@ -263,15 +262,9 @@ fn editorSave() !void {
     var allRows: ArrayList(u8) = try editorRowsToString();
     defer allRows.deinit();
 
-    var file = std.fs.cwd().openFile(E.filename.items, .{ .mode = std.fs.File.OpenMode.write_only }) catch |e| blk: {
-        if (e == error.FileNotFound) {
-            break :blk try std.fs.cwd().createFile(E.filename.items, .{ .read = false });
-        }
-        return e;
-    };
+    var file = try std.fs.cwd().createFile(E.filename.items, .{ .read = false });
 
     defer file.close();
-
     if (file.write(allRows.items)) |bytes| {
         try editorSetStatusMessage("{d} bytes written to disk", .{bytes});
         E.dirty = 0;
@@ -436,7 +429,6 @@ fn editorRowCxToRx(row: *ArrayList(u8), cx: u32) u32 {
 }
 
 fn editorUpdateRow(row: *erow) !void {
-    //TODO: possible bug for Tabs here? looks very different in c
     row.renderData.clearAndFree();
     for (row.rowData.items) |ch| {
         if (ch == '\t') {
@@ -469,9 +461,7 @@ fn editorFreeRow(row: *erow) void {
 }
 
 fn editorDelRow(at: u32) !void {
-    if (at < 0) return;
-    if (at >= E.numrows) return;
-
+    if (at < 0 or at >= E.numrows) return;
     editorFreeRow(&E.rows.items[at]);
     _ = E.rows.orderedRemove(at);
 
@@ -511,8 +501,7 @@ fn editorRowAppendString(row: *erow, append: []const u8) !void {
 }
 
 fn editorRowDelChar(row: *erow, at: u32) !void {
-    if (at < 0) return;
-    if (at >= row.rowData.items.len) return;
+    if (at < 0 or at >= row.rowData.items.len) return;
 
     _ = row.rowData.orderedRemove(at);
 
