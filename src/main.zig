@@ -175,7 +175,9 @@ fn editorProcessKeypress() !void {
             if (E.cy < E.numrows)
                 E.cx = @truncate(E.rows.items[E.cy].rowData.items.len);
         },
-
+        CTRL_KEY('f') => {
+            try editorFind();
+        },
         @intFromEnum(editorKey.BACKSPACE), CTRL_KEY('h'), @intFromEnum(editorKey.DEL_KEY) => {
             if (ch == @intFromEnum(editorKey.DEL_KEY))
                 editorMoveCursor(@intFromEnum(editorKey.ARROW_RIGHT));
@@ -272,6 +274,39 @@ fn editorSave() !void {
         try editorSetStatusMessage("Can't save! I/O error: {}", .{err});
     }
 }
+
+//find
+
+fn editorFind() !void {
+    var query = try editorPrompt("Search: {s} (ESC to cancel)");
+    if (query == null) return;
+
+    for (0..E.numrows) |i| {
+        var row = &E.rows.items[i];
+        var match = findSubstring(row.renderData.items, query.?.items);
+        if (match != null) {
+            E.cy = @truncate(i);
+            E.cx = editorRowRxToCx(&row.rowData, match.?);
+            E.rowoff = E.numrows;
+            break;
+        }
+    }
+}
+
+fn findSubstring(str: []const u8, substr: []const u8) ?u32 {
+    var len = str.len;
+    var sublen = substr.len;
+    if (len == 0) return null;
+    if (len < sublen) return null;
+
+    for (0..(len - sublen)) |i| {
+        if (std.mem.eql(u8, str[i..(i + sublen)], substr)) {
+            return @truncate(i);
+        }
+    }
+    return null;
+}
+
 //output
 
 fn editorScroll() void {
@@ -426,6 +461,20 @@ fn editorRowCxToRx(row: *ArrayList(u8), cx: u32) u32 {
     }
 
     return rx;
+}
+
+fn editorRowRxToCx(row: *ArrayList(u8), rx: u32) u32 {
+    var cur_rx: usize = 0;
+    var retcx: usize = undefined;
+    for (0..row.items.len) |cx| {
+        retcx = cx;
+        if (row.items[cx] == '\t') {
+            cur_rx += (KILO_TAB_STOP - 1) - (cur_rx % KILO_TAB_STOP);
+        }
+        cur_rx += 1;
+        if (cur_rx > rx) return @truncate(cx);
+    }
+    return @truncate(retcx);
 }
 
 fn editorUpdateRow(row: *erow) !void {
@@ -691,7 +740,7 @@ pub fn main() !void {
         try editorOpen(args[1]);
     }
 
-    try editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit", .{});
+    try editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find", .{});
 
     while (true) {
         try editorRefreshScreen();
