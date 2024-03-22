@@ -61,7 +61,7 @@ const KILO_QUIT_TIMES = 3;
 
 //input
 
-fn editorPrompt(comptime prompt: []const u8) !?ArrayList(u8) {
+fn editorPrompt(comptime prompt: []const u8, callback: *const fn (b: []const u8, ch: u8) void) !?ArrayList(u8) {
     var buf = ArrayList(u8).init(allocator);
     while (true) {
         try editorSetStatusMessage(prompt, .{buf.items});
@@ -74,15 +74,24 @@ fn editorPrompt(comptime prompt: []const u8) !?ArrayList(u8) {
                 }
             } else if (ch == '\x1b') {
                 try editorSetStatusMessage("", .{});
+                if (callback != emptyCallback) {
+                    callback(buf.items, @truncate(ch));
+                }
                 return null;
             } else if (ch == '\r') {
                 if (buf.items.len != 0) {
                     try editorSetStatusMessage("", .{});
+                    if (callback != emptyCallback) {
+                        callback(buf.items, @truncate(ch));
+                    }
                     return buf;
                 }
-            } else if (ch > 32 and ch < 128) {
+            } else if (ch >= 32 and ch < 128) {
                 try buf.append(@truncate(ch));
             }
+        }
+        if (callback != emptyCallback) {
+            callback(buf.items, @truncate(ch));
         }
     }
 }
@@ -251,9 +260,14 @@ fn editorOpen(filename: []const u8) !void {
     E.dirty = 0;
 }
 
+fn emptyCallback(b: []const u8, ch: u8) void {
+    _ = b;
+    _ = ch;
+}
+
 fn editorSave() !void {
     if (E.filename.items.len == 0) {
-        if (try editorPrompt("Save as: {s} (ESC to cancel)")) |result| {
+        if (try editorPrompt("Save as: {s} (ESC to cancel)", emptyCallback)) |result| {
             E.filename.deinit();
             E.filename = result;
         } else {
@@ -278,13 +292,14 @@ fn editorSave() !void {
 
 //find
 
-fn editorFind() !void {
-    var query = try editorPrompt("Search: {s} (ESC to cancel)");
-    if (query == null) return;
+fn editorFindCallback(buf: []const u8, key: u8) void {
+    if (key == '\r' or key == '\x1b') {
+        return;
+    }
 
     for (0..E.numrows) |i| {
         var row = &E.rows.items[i];
-        var match = findSubstring(row.renderData.items, query.?.items);
+        var match = findSubstring(row.renderData.items, buf);
         if (match != null) {
             E.cy = @truncate(i);
             E.cx = editorRowRxToCx(&row.rowData, match.?);
@@ -292,6 +307,23 @@ fn editorFind() !void {
             break;
         }
     }
+}
+
+fn editorFind() !void {
+    var saved_cx = E.cx;
+    var saved_cy = E.cy;
+    var saved_coloff = E.coloff;
+    var saved_rowoff = E.rowoff;
+    var query = try editorPrompt("Search: {s} (ESC to cancel)", editorFindCallback);
+    if (query == null) {
+        E.cx = saved_cx;
+        E.cy = saved_cy;
+        E.coloff = saved_coloff;
+        E.rowoff = saved_rowoff;
+        return;
+    }
+
+    query.?.deinit();
 }
 
 fn findSubstring(str: []const u8, substr: []const u8) ?u32 {
