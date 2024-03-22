@@ -315,15 +315,15 @@ fn editorFind() !void {
     var saved_coloff = E.coloff;
     var saved_rowoff = E.rowoff;
     var query = try editorPrompt("Search: {s} (ESC to cancel)", editorFindCallback);
-    if (query == null) {
+    if (query != null) {
+        query.?.deinit();
+    } else {
         E.cx = saved_cx;
         E.cy = saved_cy;
         E.coloff = saved_coloff;
         E.rowoff = saved_rowoff;
         return;
     }
-
-    query.?.deinit();
 }
 
 fn findSubstring(str: []const u8, substr: []const u8) ?u32 {
