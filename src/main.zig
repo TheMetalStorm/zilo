@@ -61,7 +61,7 @@ const KILO_QUIT_TIMES = 3;
 
 //input
 
-fn editorPrompt(comptime prompt: []const u8, callback: *const fn (b: []const u8, ch: u8) void) !?ArrayList(u8) {
+fn editorPrompt(comptime prompt: []const u8, callback: *const fn (b: []const u8, ch: u32) void) !?ArrayList(u8) {
     var buf = ArrayList(u8).init(allocator);
     while (true) {
         try editorSetStatusMessage(prompt, .{buf.items});
@@ -75,14 +75,14 @@ fn editorPrompt(comptime prompt: []const u8, callback: *const fn (b: []const u8,
             } else if (ch == '\x1b') {
                 try editorSetStatusMessage("", .{});
                 if (callback != emptyCallback) {
-                    callback(buf.items, @truncate(ch));
+                    callback(buf.items, ch);
                 }
                 return null;
             } else if (ch == '\r') {
                 if (buf.items.len != 0) {
                     try editorSetStatusMessage("", .{});
                     if (callback != emptyCallback) {
-                        callback(buf.items, @truncate(ch));
+                        callback(buf.items, ch);
                     }
                     return buf;
                 }
@@ -91,7 +91,7 @@ fn editorPrompt(comptime prompt: []const u8, callback: *const fn (b: []const u8,
             }
         }
         if (callback != emptyCallback) {
-            callback(buf.items, @truncate(ch));
+            callback(buf.items, ch);
         }
     }
 }
@@ -260,7 +260,7 @@ fn editorOpen(filename: []const u8) !void {
     E.dirty = 0;
 }
 
-fn emptyCallback(b: []const u8, ch: u8) void {
+fn emptyCallback(b: []const u8, ch: u32) void {
     _ = b;
     _ = ch;
 }
@@ -292,16 +292,45 @@ fn editorSave() !void {
 
 //find
 
-fn editorFindCallback(buf: []const u8, key: u8) void {
+fn editorFindCallback(buf: []const u8, key: u32) void {
+    if (key == 0) return;
+    const state = struct {
+        var last_match: i32 = -1;
+        var direction: i32 = 1;
+    };
+
     if (key == '\r' or key == '\x1b') {
+        state.last_match = -1;
+        state.direction = 1;
         return;
+    } else if (key == @intFromEnum(editorKey.ARROW_RIGHT) or key == @intFromEnum(editorKey.ARROW_DOWN)) {
+        state.direction = 1;
+    } else if (key == @intFromEnum(editorKey.ARROW_LEFT) or key == @intFromEnum(editorKey.ARROW_UP)) {
+        state.direction = -1;
+    } else {
+        state.last_match = -1;
+        state.direction = 1;
     }
 
-    for (0..E.numrows) |i| {
-        var row = &E.rows.items[i];
+    if (state.last_match == -1) {
+        state.direction = 1;
+    }
+    var current: i64 = state.last_match;
+
+    for (0..E.numrows) |_| {
+        current += state.direction;
+
+        if (current == -1) {
+            current = E.numrows - 1;
+        } else if (current == E.numrows) {
+            current = 0;
+        }
+
+        var row = &E.rows.items[@as(usize, @intCast(current))];
         var match = findSubstring(row.renderData.items, buf);
         if (match != null) {
-            E.cy = @truncate(i);
+            state.last_match = @as(i32, @intCast(current));
+            E.cy = @as(u32, @intCast(current));
             E.cx = editorRowRxToCx(&row.rowData, match.?);
             E.rowoff = E.numrows;
             break;
@@ -314,7 +343,7 @@ fn editorFind() !void {
     var saved_cy = E.cy;
     var saved_coloff = E.coloff;
     var saved_rowoff = E.rowoff;
-    var query = try editorPrompt("Search: {s} (ESC to cancel)", editorFindCallback);
+    var query = try editorPrompt("Search: {s} (Use ESC/Arrows/Enter)", editorFindCallback);
     if (query != null) {
         query.?.deinit();
     } else {
