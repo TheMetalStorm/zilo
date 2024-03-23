@@ -100,6 +100,10 @@ fn CTRL_KEY(k: u8) u8 {
     return (k) & 0x1f;
 }
 
+fn isdigit(ch: u8) bool {
+    return (ch > 47 and ch < 58);
+}
+
 fn editorMoveCursor(ch: u32) void {
     switch (ch) {
         @intFromEnum(editorKey.ARROW_LEFT) => {
@@ -420,8 +424,18 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void {
 
             if (len > E.screencols) len = E.screencols;
 
-            if (len != 0)
-                try ab.appendSlice(E.rows.items[filerow].renderData.items[E.coloff .. E.coloff + len]);
+            if (len != 0) {
+                for (E.coloff..E.coloff + len) |j| {
+                    var current = E.rows.items[filerow].renderData.items[j];
+                    if (isdigit(current)) {
+                        try ab.appendSlice("\x1b[31m");
+                        try ab.append(current);
+                        try ab.appendSlice("\x1b[39m");
+                    } else {
+                        try ab.append(current);
+                    }
+                }
+            }
         }
         try ab.appendSlice("\x1b[K");
         try ab.appendSlice("\r\n");
