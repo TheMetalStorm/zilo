@@ -17,20 +17,23 @@ const c = @cImport({
 
 //enum
 const editorKey = enum(u32) { BACKSPACE = 127, ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
+const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_NUMBER };
 
 const erow = struct {
     const Self = @This();
 
     rowData: std.ArrayList(u8),
     renderData: std.ArrayList(u8),
+    hl: std.ArrayList(u8),
 
     pub fn init(alloc: std.mem.Allocator) erow {
-        return .{ .rowData = std.ArrayList(u8).init(alloc), .renderData = std.ArrayList(u8).init(alloc) };
+        return .{ .rowData = std.ArrayList(u8).init(alloc), .renderData = std.ArrayList(u8).init(alloc), .hl = std.ArrayList(u8).init(alloc) };
     }
 
     pub fn deinit(self: Self) void {
         self.renderData.deinit();
         self.rowData.deinit();
+        self.hl.deinit();
     }
 };
 
@@ -427,14 +430,19 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void {
             if (len != 0) {
                 for (E.coloff..E.coloff + len) |j| {
                     var current = E.rows.items[filerow].renderData.items[j];
-                    if (isdigit(current)) {
-                        try ab.appendSlice("\x1b[31m");
-                        try ab.append(current);
+                    var hl = E.rows.items[filerow].hl.items[j];
+                    if (hl == @intFromEnum(editorHighlight.HL_NORMAL)) {
                         try ab.appendSlice("\x1b[39m");
+                        try ab.append(current);
                     } else {
+                        var color = editorSyntaxToColor(hl);
+                        const clen = try std.fmt.allocPrint(allocator, "\x1b[{d}m", .{color});
+                        defer allocator.free(clen);
+                        try ab.appendSlice(clen);
                         try ab.append(current);
                     }
                 }
+                try ab.appendSlice("\x1b[39m");
             }
         }
         try ab.appendSlice("\x1b[K");
@@ -564,6 +572,27 @@ fn editorUpdateRow(row: *erow) !void {
                 curLen += 1;
             }
         } else try row.renderData.append(ch);
+    }
+    try editorUpdateSyntax(row);
+}
+
+//syntax highlighting
+
+fn editorUpdateSyntax(row: *erow) !void {
+    row.hl.clearAndFree();
+    for (0..row.renderData.items.len) |i| {
+        if (isdigit(row.renderData.items[i])) {
+            try row.hl.append(@intFromEnum(editorHighlight.HL_NUMBER));
+        } else {
+            try row.hl.append(@intFromEnum(editorHighlight.HL_NORMAL));
+        }
+    }
+}
+
+fn editorSyntaxToColor(hl: u32) u32 {
+    switch (hl) {
+        @intFromEnum(editorHighlight.HL_NUMBER) => return 31,
+        else => return 37,
     }
 }
 
