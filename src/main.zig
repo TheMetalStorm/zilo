@@ -5,7 +5,8 @@ const print = std.debug.print;
 const time = std.time;
 const ArrayList = std.ArrayList;
 const builtin = std.builtin;
-const allocator = std.heap.page_allocator;
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = gpa.allocator();
 const c = @cImport({
     @cInclude("termios.h");
     @cInclude("unistd.h");
