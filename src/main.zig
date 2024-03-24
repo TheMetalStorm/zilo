@@ -175,12 +175,12 @@ fn editorProcessKeypress() !void {
                 } else {
                     print("{s}", .{"\x1b[2J"});
                     print("{s}", .{"\x1b[H"});
-                    c.exit(0);
+                    std.os.exit(0);
                 }
             } else {
                 print("{s}", .{"\x1b[2J"});
                 print("{s}", .{"\x1b[H"});
-                c.exit(0);
+                std.os.exit(0);
             }
         },
         CTRL_KEY('s') => {
@@ -521,11 +521,11 @@ fn getCursorPosition(rows: *u32, cols: *u32) i2 {
 
 fn getWindowSize(rows: *u32, cols: *u32) i2 {
     var ws: c.winsize = undefined;
-    if (c.ioctl(c.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
-        if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+    if (c.ioctl(std.os.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
+        if (c.write(std.os.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
         return getCursorPosition(rows, cols);
     } else if (ws.ws_col == 0) {
-        if (c.write(c.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+        if (c.write(std.os.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
         return getCursorPosition(rows, cols);
     } else {
         cols.* = ws.ws_col;
@@ -781,13 +781,13 @@ fn editorReadKey() u32 {
 }
 
 fn disableRawMode() callconv(.C) void {
-    if (c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &E.orig_termios) != 0) {
+    if (c.tcsetattr(std.os.STDIN_FILENO, c.TCSAFLUSH, &E.orig_termios) != 0) {
         die("Failed to restore terminal attributes\nRestart Terminal.");
     }
 }
 
 fn enableRawMode() void {
-    if (c.tcgetattr(c.STDIN_FILENO, &E.orig_termios) != 0) {
+    if (c.tcgetattr(std.os.STDIN_FILENO, &E.orig_termios) != 0) {
         die("Failed to get terminal attributes");
     }
 
@@ -802,7 +802,7 @@ fn enableRawMode() void {
     raw.c_cc[c.VMIN] = 0;
     raw.c_cc[c.VTIME] = 1;
 
-    if (c.tcsetattr(c.STDIN_FILENO, c.TCSAFLUSH, &raw) == -1) die("tcsetattr");
+    if (c.tcsetattr(std.os.STDIN_FILENO, c.TCSAFLUSH, &raw) == -1) die("tcsetattr");
 }
 
 fn die(str: []const u8) void {
@@ -811,7 +811,7 @@ fn die(str: []const u8) void {
     print("{s}", .{"\x1b[H"});
 
     print("{s}\r\n", .{str});
-    c.exit(1);
+    std.os.exit(1);
 }
 
 //init
