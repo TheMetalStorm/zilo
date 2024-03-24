@@ -1,4 +1,4 @@
-//FIXME: Cursor blinks weirdly, happened after introducing syntax highlighting
+//FIXME: Cursor blinks weirdly, apperantly never worked?
 
 //import/include
 const std = @import("std");
