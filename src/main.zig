@@ -1,3 +1,5 @@
+//FIXME: Cursor blinks weirdly, happened after introducing syntax highlighting
+
 //import/include
 const std = @import("std");
 const ascii = std.ascii;
