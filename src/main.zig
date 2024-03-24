@@ -20,7 +20,7 @@ const c = @cImport({
 
 //enum
 const editorKey = enum(u32) { BACKSPACE = 127, ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
-const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_NUMBER };
+const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_NUMBER, HL_MATCH };
 
 const erow = struct {
     const Self = @This();
@@ -307,7 +307,15 @@ fn editorFindCallback(buf: []const u8, key: u32) void {
     const state = struct {
         var last_match: i32 = -1;
         var direction: i32 = 1;
+        var saved_hl_line: u32 = undefined;
+        var saved_hl: ArrayList(u8) = undefined;
     };
+
+    if (state.saved_hl.items.len != 0) {
+        var row = &E.rows.items[state.saved_hl_line];
+        row.hl = state.saved_hl;
+        state.saved_hl.clearRetainingCapacity();
+    }
 
     if (key == '\r' or key == '\x1b') {
         state.last_match = -1;
@@ -343,6 +351,15 @@ fn editorFindCallback(buf: []const u8, key: u32) void {
             E.cy = @as(u32, @intCast(current));
             E.cx = editorRowRxToCx(&row.rowData, match.?);
             E.rowoff = E.numrows;
+
+            state.saved_hl_line = @as(u32, @intCast(current));
+            state.saved_hl = row.hl.clone() catch ArrayList(u8).init(allocator);
+            if (state.saved_hl.items.len != 0) {
+                for (match.?..match.? + buf.len) |i| {
+                    row.hl.items[i] = @intFromEnum(editorHighlight.HL_MATCH);
+                }
+            }
+
             break;
         }
     }
@@ -429,19 +446,26 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void {
             }
 
             if (len > E.screencols) len = E.screencols;
+            var current_color: i32 = -1;
 
             if (len != 0) {
                 for (E.coloff..E.coloff + len) |j| {
                     var current = E.rows.items[filerow].renderData.items[j];
                     var hl = E.rows.items[filerow].hl.items[j];
                     if (hl == @intFromEnum(editorHighlight.HL_NORMAL)) {
-                        try ab.appendSlice("\x1b[39m");
+                        if (current_color != -1) {
+                            try ab.appendSlice("\x1b[39m");
+                            current_color = -1;
+                        }
                         try ab.append(current);
                     } else {
                         var color = editorSyntaxToColor(hl);
-                        const clen = try std.fmt.allocPrint(allocator, "\x1b[{d}m", .{color});
-                        defer allocator.free(clen);
-                        try ab.appendSlice(clen);
+                        if (color != current_color) {
+                            current_color = @as(i32, @intCast(color));
+                            const clen = try std.fmt.allocPrint(allocator, "\x1b[{d}m", .{color});
+                            defer allocator.free(clen);
+                            try ab.appendSlice(clen);
+                        }
                         try ab.append(current);
                     }
                 }
@@ -595,6 +619,7 @@ fn editorUpdateSyntax(row: *erow) !void {
 fn editorSyntaxToColor(hl: u32) u32 {
     switch (hl) {
         @intFromEnum(editorHighlight.HL_NUMBER) => return 31,
+        @intFromEnum(editorHighlight.HL_MATCH) => return 34,
         else => return 37,
     }
 }
