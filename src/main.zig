@@ -1,4 +1,5 @@
 //FIXME: Cursor blinks weirdly, happened after introducing syntax highlighting
+//TODO: rethink if instead of die method we just throw error
 
 //import/include
 const std = @import("std");
@@ -7,10 +8,10 @@ const print = std.debug.print;
 const time = std.time;
 const ArrayList = std.ArrayList;
 const builtin = std.builtin;
+const os = std.os;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
 const c = @cImport({
-    @cInclude("termios.h");
     @cInclude("unistd.h");
     @cInclude("stdlib.h");
     @cInclude("stdio.h");
@@ -41,7 +42,7 @@ const erow = struct {
 };
 
 const editorConfig = struct {
-    var orig_termios: c.termios = undefined;
+    var orig_termios: os.termios = undefined;
     var cx: u32 = undefined;
     var cy: u32 = undefined;
     var rx: u32 = undefined;
@@ -177,12 +178,12 @@ fn editorProcessKeypress() !void {
                 } else {
                     print("{s}", .{"\x1b[2J"});
                     print("{s}", .{"\x1b[H"});
-                    std.os.exit(0);
+                    os.exit(0);
                 }
             } else {
                 print("{s}", .{"\x1b[2J"});
                 print("{s}", .{"\x1b[H"});
-                std.os.exit(0);
+                os.exit(0);
             }
         },
         CTRL_KEY('s') => {
@@ -503,7 +504,7 @@ fn getCursorPosition(rows: *u32, cols: *u32) i2 {
     var buf: [32]u8 = undefined;
     var i: u32 = 0;
 
-    if (c.write(c.STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
+    if (c.write(os.STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
 
     while (i < buf.len) {
         if (c.read(c.STDIN_FILENO, &buf[i], 1) != 1) break;
@@ -523,11 +524,11 @@ fn getCursorPosition(rows: *u32, cols: *u32) i2 {
 
 fn getWindowSize(rows: *u32, cols: *u32) i2 {
     var ws: c.winsize = undefined;
-    if (c.ioctl(std.os.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
-        if (c.write(std.os.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+    if (c.ioctl(os.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
+        if (c.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
         return getCursorPosition(rows, cols);
     } else if (ws.ws_col == 0) {
-        if (c.write(std.os.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+        if (c.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
         return getCursorPosition(rows, cols);
     } else {
         cols.* = ws.ws_col;
@@ -739,12 +740,12 @@ fn editorReadKey() u32 {
 
     if (readChar == '\x1b') {
         var seq: [3]u8 = undefined;
-        if (c.read(c.STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
-        if (c.read(c.STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+        if (c.read(os.STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
+        if (c.read(os.STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
 
         if (seq[0] == '[') {
             if (seq[1] >= '0' and seq[1] <= '9') {
-                if (c.read(c.STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
+                if (c.read(os.STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
                 if (seq[2] == '~') {
                     switch (seq[1]) {
                         '1' => return @intFromEnum(editorKey.HOME_KEY),
@@ -783,28 +784,39 @@ fn editorReadKey() u32 {
 }
 
 fn disableRawMode() callconv(.C) void {
-    if (c.tcsetattr(std.os.STDIN_FILENO, c.TCSAFLUSH, &E.orig_termios) != 0) {
+    var res = os.tcsetattr(os.STDIN_FILENO, .FLUSH, E.orig_termios);
+
+    if (@TypeOf(res) == os.TermiosSetError) {
         die("Failed to restore terminal attributes\nRestart Terminal.");
     }
 }
 
-fn enableRawMode() void {
-    if (c.tcgetattr(std.os.STDIN_FILENO, &E.orig_termios) != 0) {
+fn enableRawMode() !void {
+    var term = try os.tcgetattr(os.STDIN_FILENO);
+    if (@TypeOf(term) != os.TermiosGetError) {
+        E.orig_termios = term;
+    } else {
         die("Failed to get terminal attributes");
     }
 
     _ = c.atexit(disableRawMode);
 
-    var raw: c.termios = E.orig_termios;
+    var raw: os.termios = E.orig_termios;
 
-    raw.c_iflag &= ~(@as(c_uint, c.BRKINT) | @as(c_uint, c.ICRNL) | @as(c_uint, c.INPCK) | @as(c_uint, c.ISTRIP) | @as(c_uint, c.IXON));
-    raw.c_oflag &= ~(@as(c_uint, c.OPOST));
-    raw.c_cflag |= (@as(c_uint, c.CS8));
-    raw.c_lflag &= ~(@as(c_uint, c.ECHO) | @as(c_uint, c.ICANON) | @as(c_uint, c.IEXTEN) | @as(c_uint, c.ISIG));
-    raw.c_cc[c.VMIN] = 0;
-    raw.c_cc[c.VTIME] = 1;
+    raw.iflag &= ~@as(os.linux.tcflag_t, os.linux.IXON | os.linux.ICRNL | os.linux.BRKINT | os.linux.INPCK | os.linux.ISTRIP);
+    raw.oflag &= ~@as(os.linux.tcflag_t, os.linux.OPOST);
+    raw.cflag |= os.linux.CS8;
+    raw.lflag &= ~@as(
+        os.linux.tcflag_t,
+        os.linux.ECHO | os.linux.ICANON | os.linux.ISIG | os.linux.IEXTEN,
+    );
+    raw.cc[os.linux.V.MIN] = 0;
+    raw.cc[os.linux.V.TIME] = 1;
 
-    if (c.tcsetattr(std.os.STDIN_FILENO, c.TCSAFLUSH, &raw) == -1) die("tcsetattr");
+    var new = os.tcsetattr(os.STDIN_FILENO, .FLUSH, raw);
+    if (@TypeOf(new) == os.TermiosSetError) {
+        die("tcsetattr");
+    }
 }
 
 fn die(str: []const u8) void {
@@ -813,7 +825,7 @@ fn die(str: []const u8) void {
     print("{s}", .{"\x1b[H"});
 
     print("{s}\r\n", .{str});
-    std.os.exit(1);
+    os.exit(1);
 }
 
 //init
@@ -840,7 +852,7 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    enableRawMode();
+    try enableRawMode();
     initEditor();
     defer deinitEditor();
     if (args.len >= 2) {
