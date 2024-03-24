@@ -1,5 +1,4 @@
 //FIXME: Cursor blinks weirdly, happened after introducing syntax highlighting
-//TODO: rethink if instead of die method we just throw error
 
 //import/include
 const std = @import("std");
@@ -96,9 +95,9 @@ fn editorPrompt(comptime prompt: []const u8, callback: *const fn (b: []const u8,
             } else if (ch >= 32 and ch < 128) {
                 try buf.append(@truncate(ch));
             }
-        }
-        if (callback != emptyCallback) {
-            callback(buf.items, ch);
+            if (callback != emptyCallback) {
+                callback(buf.items, ch);
+            }
         }
     }
 }
