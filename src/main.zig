@@ -106,10 +106,6 @@ fn CTRL_KEY(k: u8) u8 {
     return (k) & 0x1f;
 }
 
-fn isdigit(ch: u8) bool {
-    return (ch > 47 and ch < 58);
-}
-
 fn editorMoveCursor(ch: u32) void {
     switch (ch) {
         @intFromEnum(editorKey.ARROW_LEFT) => {
@@ -605,14 +601,31 @@ fn editorUpdateRow(row: *erow) !void {
 
 //syntax highlighting
 
+fn is_separator(ch: u8) bool {
+    var seperators = ",.()+-/*=~%<>[];";
+
+    return ascii.isWhitespace(ch) //or std.mem.cch == '\0'*/
+    or (std.mem.indexOf(u8, seperators, &[1]u8{ch}) != null);
+}
+
 fn editorUpdateSyntax(row: *erow) !void {
     row.hl.clearAndFree();
-    for (0..row.renderData.items.len) |i| {
-        if (isdigit(row.renderData.items[i])) {
+
+    var prev_sep = false;
+    var i: usize = 0;
+    while (i < row.renderData.items.len) {
+        var prev_hl = if (i > 0) row.hl.items[i - 1] else @intFromEnum(editorHighlight.HL_NORMAL);
+        var ch = row.renderData.items[i];
+        if (ascii.isDigit(ch) and (prev_sep or prev_hl == @intFromEnum(editorHighlight.HL_NORMAL))) {
             try row.hl.append(@intFromEnum(editorHighlight.HL_NUMBER));
+            i += 1;
+            prev_sep = true;
+            continue;
         } else {
             try row.hl.append(@intFromEnum(editorHighlight.HL_NORMAL));
         }
+        prev_sep = is_separator(ch);
+        i += 1;
     }
 }
 
