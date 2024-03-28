@@ -22,6 +22,12 @@ const c = @cImport({
 const editorKey = enum(u32) { BACKSPACE = 127, ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
 const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_NUMBER, HL_MATCH };
 
+const editorSyntax = struct {
+    filetype: []const u8,
+    filematch: []const []const u8,
+    flags: u32,
+};
+
 const erow = struct {
     const Self = @This();
 
@@ -55,15 +61,23 @@ const editorConfig = struct {
     var filename: ArrayList(u8) = undefined;
     var statusmsg: ArrayList(u8) = undefined;
     var statusmsg_time: i64 = undefined;
+    var syntax: ?*editorSyntax = null;
 };
 
 const E = editorConfig;
+
+//filetypes
+var HLDB: ArrayList(editorSyntax) = undefined;
+const C_HL_extensions = [_][]const u8{ ".c", ".h", ".cpp" };
+const ZIG_HL_extensions = [_][]const u8{".zig"};
+
 //const
 const stdin = std.io.getStdIn().reader();
 const stdout = std.io.getStdOut().writer();
 const ZILO_VERSION = "0.0.1";
 const KILO_TAB_STOP = 8;
 const KILO_QUIT_TIMES = 3;
+const HL_HIGHLIGHT_NUMBERS = 1 << 0;
 
 //input
 
@@ -486,7 +500,8 @@ fn editorDrawStatusBar(ab: *ArrayList(u8)) !void {
 
     var modifiedText = if (E.dirty != 0) "(modified)" else "";
 
-    const rstatus = try std.fmt.allocPrint(allocator, "{d}/{d}", .{ E.cy + 1, E.numrows });
+    const filetype = if (E.syntax == null) "no ft" else E.syntax.?.filetype;
+    const rstatus = try std.fmt.allocPrint(allocator, "{s} | {d}/{d}", .{ filetype, E.cy + 1, E.numrows });
     const status = try std.fmt.allocPrint(allocator, "{s} - {d} lines {s}", .{ filename.items, E.numrows, modifiedText });
     var len = status.len;
     if (len > E.screencols) len = E.screencols;
@@ -604,25 +619,28 @@ fn editorUpdateRow(row: *erow) !void {
 fn is_separator(ch: u8) bool {
     var seperators = ",.()+-/*=~%<>[];";
 
-    return ascii.isWhitespace(ch) //or std.mem.cch == '\0'*/
-    or (std.mem.indexOf(u8, seperators, &[1]u8{ch}) != null);
+    return ascii.isWhitespace(ch) or (ch == 0) or (std.mem.indexOf(u8, seperators, &[1]u8{ch}) != null);
 }
 
 fn editorUpdateSyntax(row: *erow) !void {
     row.hl.clearAndFree();
+    try row.hl.appendNTimes(@intFromEnum(editorHighlight.HL_NORMAL), row.renderData.items.len);
 
-    var prev_sep = false;
+    if (E.syntax == null) return;
+
+    var prev_sep = true;
     var i: usize = 0;
     while (i < row.renderData.items.len) {
         var prev_hl = if (i > 0) row.hl.items[i - 1] else @intFromEnum(editorHighlight.HL_NORMAL);
         var ch = row.renderData.items[i];
-        if (ascii.isDigit(ch) and (prev_sep or prev_hl == @intFromEnum(editorHighlight.HL_NORMAL))) {
-            try row.hl.append(@intFromEnum(editorHighlight.HL_NUMBER));
-            i += 1;
-            prev_sep = true;
-            continue;
-        } else {
-            try row.hl.append(@intFromEnum(editorHighlight.HL_NORMAL));
+
+        if (E.syntax.?.flags > 0 and HL_HIGHLIGHT_NUMBERS > 0) {
+            if ((ascii.isDigit(ch) and (prev_sep or prev_hl == @intFromEnum(editorHighlight.HL_NUMBER))) or (ch == '.' and prev_hl == @intFromEnum(editorHighlight.HL_NUMBER))) {
+                try row.hl.insert(i, @intFromEnum(editorHighlight.HL_NUMBER));
+                i += 1;
+                prev_sep = false;
+                continue;
+            }
         }
         prev_sep = is_separator(ch);
         i += 1;
@@ -885,7 +903,14 @@ pub fn initEditor() void {
     E.statusmsg = statusmsg;
     E.statusmsg_time = 0;
 }
+
 pub fn main() !void {
+    HLDB = ArrayList(editorSyntax).init(allocator);
+    defer HLDB.deinit();
+
+    try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
+    try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
+
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
