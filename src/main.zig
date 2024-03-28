@@ -905,11 +905,16 @@ pub fn initEditor() void {
     E.statusmsg_time = 0;
 }
 
-pub fn main() !void {
+pub fn setupHLDB() !void {
     HLDB = ArrayList(editorSyntax).init(allocator);
-    defer HLDB.deinit();
     try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
     try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
+}
+
+pub fn main() !void {
+    try setupHLDB();
+    defer HLDB.deinit();
+
     var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
 
