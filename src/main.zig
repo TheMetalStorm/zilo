@@ -876,6 +876,7 @@ fn enableRawMode() !void {
 
 fn die(str: []const u8) void {
     disableRawMode();
+    HLDB.deinit();
     print("{s}", .{"\x1b[2J"});
     print("{s}", .{"\x1b[H"});
 
@@ -907,18 +908,18 @@ pub fn initEditor() void {
 pub fn main() !void {
     HLDB = ArrayList(editorSyntax).init(allocator);
     defer HLDB.deinit();
-
     try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
     try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
 
     try enableRawMode();
     initEditor();
     defer deinitEditor();
-    if (args.len >= 2) {
-        try editorOpen(args[1]);
+
+    _ = args.next();
+    if (args.next()) |arg| {
+        try editorOpen(arg);
     }
 
     try editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find", .{});
@@ -931,7 +932,7 @@ pub fn main() !void {
 
 pub fn panic(msg: []const u8, error_return_trace: ?*builtin.StackTrace, ret_addr: ?usize) noreturn {
     @setCold(true);
-    disableRawMode();
+    die(msg);
     const first_trace_addr = ret_addr orelse @returnAddress();
     std.debug.panicImpl(error_return_trace, first_trace_addr, msg);
 }
