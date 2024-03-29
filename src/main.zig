@@ -58,10 +58,10 @@ const editorConfig = struct {
     var numrows: u32 = undefined;
     var rows: ArrayList(erow) = undefined;
     var dirty: u32 = undefined;
-    var filename: ArrayList(u8) = undefined;
+    var filename: ?ArrayList(u8) = null;
     var statusmsg: ArrayList(u8) = undefined;
     var statusmsg_time: i64 = undefined;
-    var syntax: ?*editorSyntax = null;
+    var syntax: ?editorSyntax = null;
 };
 
 const E = editorConfig;
@@ -263,11 +263,13 @@ fn editorRowsToString() !ArrayList(u8) {
     return allLines;
 }
 fn editorOpen(filename: []const u8) !void {
-    E.filename.deinit();
+    E.filename.?.deinit();
 
     for (filename) |ch| {
-        try E.filename.append(ch);
+        try E.filename.?.append(ch);
     }
+
+    try editorSelectSyntaxHighlight();
 
     var file = try std.fs.cwd().openFile(filename, .{});
     defer file.close();
@@ -286,20 +288,22 @@ fn emptyCallback(b: []const u8, ch: u32) void {
 }
 
 fn editorSave() !void {
-    if (E.filename.items.len == 0) {
+    if (E.filename.?.items.len == 0) {
         if (try editorPrompt("Save as: {s} (ESC to cancel)", emptyCallback)) |result| {
-            E.filename.deinit();
-            E.filename = result;
-        } else {
+            E.filename.?.deinit();
+            E.filename.? = result;
+        }
+        if (E.filename.?.items.len == 0) {
             try editorSetStatusMessage("Save aborted", .{});
             return;
         }
+        try editorSelectSyntaxHighlight();
     }
 
     var allRows: ArrayList(u8) = try editorRowsToString();
     defer allRows.deinit();
 
-    var file = try std.fs.cwd().createFile(E.filename.items, .{ .read = false });
+    var file = try std.fs.cwd().createFile(E.filename.?.items, .{ .read = false });
 
     defer file.close();
     if (file.write(allRows.items)) |bytes| {
@@ -492,8 +496,8 @@ fn editorDrawStatusBar(ab: *ArrayList(u8)) !void {
     var filename: ArrayList(u8) = ArrayList(u8).init(allocator);
     defer filename.deinit();
 
-    if (E.filename.items.len != 0) {
-        filename = try E.filename.clone();
+    if (E.filename.?.items.len != 0) {
+        filename = try E.filename.?.clone();
     } else {
         try filename.appendSlice("[No Name]");
     }
@@ -653,6 +657,34 @@ fn editorSyntaxToColor(hl: u32) u32 {
         @intFromEnum(editorHighlight.HL_MATCH) => return 34,
         else => return 37,
     }
+}
+
+fn editorSelectSyntaxHighlight() !void {
+    E.syntax = null;
+    if (E.filename) |filename| {
+        var ext = std.mem.indexOf(u8, filename.items, &[1]u8{'.'});
+        for (HLDB.items) |s| {
+            for (s.filematch) |fmItem| {
+                var is_ext = (fmItem[0] == '.');
+                var found = false;
+                if (ext) |dotIndex| {
+                    var ending = filename.items[dotIndex..filename.items.len];
+                    if (is_ext and std.mem.eql(u8, ending, fmItem)) {
+                        found = true;
+                    }
+                } else if (!is_ext and (std.mem.indexOf(u8, filename.items, fmItem) != null)) {
+                    found = true;
+                }
+                if (found) {
+                    E.syntax = s;
+                    for (E.rows.items) |*row| {
+                        try editorUpdateSyntax(row);
+                    }
+                    return;
+                }
+            }
+        }
+    } else return;
 }
 
 // row operations
@@ -947,5 +979,5 @@ fn deinitEditor() void {
         array_list.deinit();
     }
 
-    E.filename.deinit();
+    E.filename.?.deinit();
 }
