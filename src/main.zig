@@ -187,12 +187,12 @@ fn editorProcessKeypress() !void {
                 } else {
                     print("{s}", .{"\x1b[2J"});
                     print("{s}", .{"\x1b[H"});
-                    os.exit(0);
+                    closeProgram();
                 }
             } else {
                 print("{s}", .{"\x1b[2J"});
                 print("{s}", .{"\x1b[H"});
-                os.exit(0);
+                closeProgram();
             }
         },
         CTRL_KEY('s') => {
@@ -542,10 +542,10 @@ fn getCursorPosition(rows: *u32, cols: *u32) i2 {
     var buf: [32]u8 = undefined;
     var i: u32 = 0;
 
-    if (c.write(os.STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
+    if (os.write(os.STDOUT_FILENO, "\x1b[6n") == error.WriteError) die("write", true);
 
     while (i < buf.len) {
-        if (c.read(c.STDIN_FILENO, &buf[i], 1) != 1) break;
+        if (c.read(os.STDIN_FILENO, &buf[i], 1) != 1) break;
         if (buf[i] == 'R') {
             i += 1;
             break;
@@ -561,12 +561,12 @@ fn getCursorPosition(rows: *u32, cols: *u32) i2 {
 }
 
 fn getWindowSize(rows: *u32, cols: *u32) i2 {
-    var ws: c.winsize = undefined;
-    if (c.ioctl(os.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
-        if (c.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+    var ws: os.linux.winsize = undefined;
+    if (std.os.system.ioctl(os.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
+        if (os.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B") == error.WriteError) die("write", true);
         return getCursorPosition(rows, cols);
     } else if (ws.ws_col == 0) {
-        if (c.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+        if (os.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B") == error.WriteError) die("write", true);
         return getCursorPosition(rows, cols);
     } else {
         cols.* = ws.ws_col;
@@ -821,7 +821,7 @@ fn editorReadKey() u32 {
         if (err == error.EndOfStream) {
             readChar = 0;
         } else {
-            die("read");
+            die("read", true);
         }
     }
 
@@ -874,7 +874,7 @@ fn disableRawMode() callconv(.C) void {
     var res = os.tcsetattr(os.STDIN_FILENO, .FLUSH, E.orig_termios);
 
     if (@TypeOf(res) == os.TermiosSetError) {
-        die("Failed to restore terminal attributes\nRestart Terminal.");
+        die("Failed to restore terminal attributes\nRestart Terminal.", true);
     }
 }
 
@@ -883,10 +883,8 @@ fn enableRawMode() !void {
     if (@TypeOf(term) != os.TermiosGetError) {
         E.orig_termios = term;
     } else {
-        die("Failed to get terminal attributes");
+        die("Failed to get terminal attributes", true);
     }
-
-    _ = c.atexit(disableRawMode);
 
     var raw: os.termios = E.orig_termios;
 
@@ -902,18 +900,18 @@ fn enableRawMode() !void {
 
     var new = os.tcsetattr(os.STDIN_FILENO, .FLUSH, raw);
     if (@TypeOf(new) == os.TermiosSetError) {
-        die("tcsetattr");
+        die("tcsetattr", true);
     }
 }
 
-fn die(str: []const u8) void {
+fn die(str: []const u8, exit: bool) void {
     disableRawMode();
     HLDB.deinit();
     print("{s}", .{"\x1b[2J"});
     print("{s}", .{"\x1b[H"});
-
     print("{s}\r\n", .{str});
-    os.exit(1);
+    if (exit)
+        os.exit(1);
 }
 
 //init
@@ -926,7 +924,7 @@ pub fn initEditor() void {
     E.coloff = 0;
     E.numrows = 0;
     E.dirty = 0;
-    if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
+    if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize", true);
     E.screenrows -= 2;
     var rows = ArrayList(erow).init(allocator);
     var filename = ArrayList(u8).init(allocator);
@@ -941,6 +939,11 @@ pub fn setupHLDB() !void {
     HLDB = ArrayList(editorSyntax).init(allocator);
     try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
     try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
+}
+
+pub fn closeProgram() void {
+    disableRawMode();
+    os.exit(0);
 }
 
 pub fn main() !void {
@@ -969,7 +972,7 @@ pub fn main() !void {
 
 pub fn panic(msg: []const u8, error_return_trace: ?*builtin.StackTrace, ret_addr: ?usize) noreturn {
     @setCold(true);
-    die(msg);
+    die(msg, false);
     const first_trace_addr = ret_addr orelse @returnAddress();
     std.debug.panicImpl(error_return_trace, first_trace_addr, msg);
 }
