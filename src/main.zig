@@ -1,4 +1,4 @@
-//FIXME: Cursor blinks weirdly, apperantly never worked?
+//adjahkfhjsdifsbhfslFIXME: Cursor blinks weirdly, apperantly never worked?
 
 //import/include
 const std = @import("std");
@@ -20,12 +20,13 @@ const c = @cImport({
 
 //enum
 const editorKey = enum(u32) { BACKSPACE = 127, ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
-const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_NUMBER, HL_MATCH };
+const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_COMMENT, HL_STRING, HL_NUMBER, HL_MATCH };
 
 const editorSyntax = struct {
     filetype: []const u8,
     filematch: []const []const u8,
-    flags: u32,
+    singleline_comment_start: []const u8,
+    flags: HL_HIGHLIGHT_FLAGS,
 };
 
 const erow = struct {
@@ -77,8 +78,12 @@ const stdout = std.io.getStdOut().writer();
 const ZILO_VERSION = "0.0.1";
 const KILO_TAB_STOP = 8;
 const KILO_QUIT_TIMES = 3;
-const HL_HIGHLIGHT_NUMBERS = 1 << 0;
+pub const HL_HIGHLIGHT_FLAGS = packed struct(u32) {
+    numbers: bool = false,
+    strings: bool = false,
 
+    _padding: u30 = 0,
+};
 //input
 
 fn editorPrompt(comptime prompt: []const u8, callback: *const fn (b: []const u8, ch: u32) void) !?ArrayList(u8) {
@@ -633,12 +638,35 @@ fn editorUpdateSyntax(row: *erow) !void {
     if (E.syntax == null) return;
 
     var prev_sep = true;
+    var in_string: u8 = 0;
     var i: usize = 0;
     while (i < row.renderData.items.len) {
         var prev_hl = if (i > 0) row.hl.items[i - 1] else @intFromEnum(editorHighlight.HL_NORMAL);
         var ch = row.renderData.items[i];
 
-        if (E.syntax.?.flags > 0 and HL_HIGHLIGHT_NUMBERS > 0) {
+        if (E.syntax.?.flags.strings) {
+            if (in_string > 0) {
+                row.hl.items[i] = @intFromEnum(editorHighlight.HL_STRING);
+                if (ch == '\\' and i + 1 < row.renderData.items.len) {
+                    row.hl.items[i + 1] = @intFromEnum(editorHighlight.HL_STRING);
+                    i += 2;
+                    continue;
+                }
+                if (ch == in_string) in_string = 0;
+                i += 1;
+                prev_sep = true;
+                continue;
+            } else {
+                if (ch == '"' or ch == '\'') {
+                    in_string = ch;
+                    row.hl.items[i] = @intFromEnum(editorHighlight.HL_STRING);
+                    i += 1;
+                    continue;
+                }
+            }
+        }
+
+        if (E.syntax.?.flags.numbers) {
             if ((ascii.isDigit(ch) and (prev_sep or prev_hl == @intFromEnum(editorHighlight.HL_NUMBER))) or (ch == '.' and prev_hl == @intFromEnum(editorHighlight.HL_NUMBER))) {
                 try row.hl.insert(i, @intFromEnum(editorHighlight.HL_NUMBER));
                 i += 1;
@@ -653,7 +681,9 @@ fn editorUpdateSyntax(row: *erow) !void {
 
 fn editorSyntaxToColor(hl: u32) u32 {
     switch (hl) {
+        @intFromEnum(editorHighlight.HL_COMMENT) => return 36,
         @intFromEnum(editorHighlight.HL_NUMBER) => return 31,
+        @intFromEnum(editorHighlight.HL_STRING) => return 35,
         @intFromEnum(editorHighlight.HL_MATCH) => return 34,
         else => return 37,
     }
@@ -937,8 +967,8 @@ pub fn initEditor() void {
 
 pub fn setupHLDB() !void {
     HLDB = ArrayList(editorSyntax).init(allocator);
-    try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
-    try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .flags = HL_HIGHLIGHT_NUMBERS });
+    try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .singleline_comment_start = "//", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
+    try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .singleline_comment_start = "//", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
 }
 
 pub fn closeProgram() void {
