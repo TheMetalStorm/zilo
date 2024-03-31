@@ -1,6 +1,5 @@
-//adjahkfhjsdifsbhfslFIXME: Cursor blinks weirdly, apperantly never worked?
+//FIXME: Cursor blinks weirdly, apperantly never worked?
 
-//import/include
 const std = @import("std");
 const ascii = std.ascii;
 const print = std.debug.print;
@@ -20,11 +19,12 @@ const c = @cImport({
 
 //enum
 const editorKey = enum(u32) { BACKSPACE = 127, ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
-const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_COMMENT, HL_STRING, HL_NUMBER, HL_MATCH };
+const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_COMMENT, HL_KEYWORD1, HL_KEYWORD2, HL_STRING, HL_NUMBER, HL_MATCH };
 
 const editorSyntax = struct {
     filetype: []const u8,
     filematch: []const []const u8,
+    keywords: []const []const u8,
     singleline_comment_start: []const u8,
     flags: HL_HIGHLIGHT_FLAGS,
 };
@@ -70,7 +70,10 @@ const E = editorConfig;
 //filetypes
 var HLDB: ArrayList(editorSyntax) = undefined;
 const C_HL_extensions = [_][]const u8{ ".c", ".h", ".cpp" };
+const C_HL_keywords = [_][]const u8{ "switch", "if", "while", "for", "break", "continue", "return", "else", "struct", "union", "typedef", "static", "enum", "class", "case", "int|", "long|", "double|", "float|", "char|", "unsigned|", "signed|", "void|" };
+
 const ZIG_HL_extensions = [_][]const u8{".zig"};
+const ZIG_HL_keywords = [_][]const u8{ "addrspace", "align", "allowzero", "and", "anyframe", "anytype", "asm", "async", "await", "break", "callconv", "catch", "comptime", "const", "continue", "defer", "else", "enum", "errdefer", "error", "export", "extern", "fn", "for", "if", "inline", "linksection", "noalias", "noinline", "nosuspend", "opaque", "or", "orelse", "packed", "pub", "resume", "return", "struct", "suspend", "switch", "test", "threadlocal", "try", "union", "unreachable", "usingnamespace", "var", "volatile", "while", "i8|", "u8|", "i16|", "u16|", "i32|", "u32|", "i64|", "u64|", "i128|", "u128|", "isize|", "usize|", "c_char|", "c_short|", "c_ushort|", "c_int|", "c_uint|", "c_long|", "c_ulong|", "c_longlong|", "c_ulonglong|", "c_longdouble|", "f16|", "f32|", "f64|", "f80|", "f128|", "bool|", "anyopaque|", "void|", "noreturn|", "type|", "anyerror|", "comptime_int|", "comptime_float|" };
 
 //const
 const stdin = std.io.getStdIn().reader();
@@ -637,12 +640,29 @@ fn editorUpdateSyntax(row: *erow) !void {
 
     if (E.syntax == null) return;
 
+    var scs = E.syntax.?.singleline_comment_start;
+    var scs_len = scs.len;
+
     var prev_sep = true;
     var in_string: u8 = 0;
     var i: usize = 0;
     while (i < row.renderData.items.len) {
         var prev_hl = if (i > 0) row.hl.items[i - 1] else @intFromEnum(editorHighlight.HL_NORMAL);
         var ch = row.renderData.items[i];
+
+        if (row.renderData.items.len >= scs_len and scs_len > 0 and in_string == 0 and (i + scs_len) < row.renderData.items.len) {
+            var a = row.renderData.items[i .. i + scs_len];
+            var s = scs;
+            _ = a;
+            _ = s;
+            if (std.mem.eql(u8, row.renderData.items[i .. i + scs_len], scs)) {
+                //if (!strncmp(&row->render[i], scs, scs_len)) {
+                for (i..row.renderData.items.len) |j| {
+                    row.hl.items[j] = @intFromEnum(editorHighlight.HL_COMMENT);
+                }
+                break;
+            }
+        }
 
         if (E.syntax.?.flags.strings) {
             if (in_string > 0) {
@@ -683,6 +703,8 @@ fn editorSyntaxToColor(hl: u32) u32 {
     switch (hl) {
         @intFromEnum(editorHighlight.HL_COMMENT) => return 36,
         @intFromEnum(editorHighlight.HL_NUMBER) => return 31,
+        @intFromEnum(editorHighlight.HL_KEYWORD1) => return 33,
+        @intFromEnum(editorHighlight.HL_KEYWORD2) => return 32,
         @intFromEnum(editorHighlight.HL_STRING) => return 35,
         @intFromEnum(editorHighlight.HL_MATCH) => return 34,
         else => return 37,
@@ -967,8 +989,8 @@ pub fn initEditor() void {
 
 pub fn setupHLDB() !void {
     HLDB = ArrayList(editorSyntax).init(allocator);
-    try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .singleline_comment_start = "//", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
-    try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .singleline_comment_start = "//", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
+    try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .keywords = &C_HL_keywords, .singleline_comment_start = "//", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
+    try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .keywords = &ZIG_HL_keywords, .singleline_comment_start = "//", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
 }
 
 pub fn closeProgram() void {
