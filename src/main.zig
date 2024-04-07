@@ -37,9 +37,11 @@ const erow = struct {
     rowData: std.ArrayList(u8),
     renderData: std.ArrayList(u8),
     hl: std.ArrayList(u8),
+    idx: u32,
+    hl_open_comment: u32,
 
-    pub fn init(alloc: std.mem.Allocator) erow {
-        return .{ .rowData = std.ArrayList(u8).init(alloc), .renderData = std.ArrayList(u8).init(alloc), .hl = std.ArrayList(u8).init(alloc) };
+    pub fn init(alloc: std.mem.Allocator, _idx: u32, _hl_open_comment: u32) erow {
+        return .{ .rowData = std.ArrayList(u8).init(alloc), .renderData = std.ArrayList(u8).init(alloc), .hl = std.ArrayList(u8).init(alloc), .idx = _idx, .hl_open_comment = _hl_open_comment };
     }
 
     pub fn deinit(self: Self) void {
@@ -664,7 +666,7 @@ fn editorUpdateSyntax(row: *erow) !void {
 
     var prev_sep = true;
     var in_string: u8 = 0;
-    var in_comment: bool = false;
+    var in_comment: bool = (row.idx > 0 and (E.rows.items[row.idx - 1].hl_open_comment > 0));
     var i: usize = 0;
     while (i < row.renderData.items.len) {
         var prev_hl = if (i > 0) row.hl.items[i - 1] else @intFromEnum(editorHighlight.HL_NORMAL);
@@ -771,6 +773,12 @@ fn editorUpdateSyntax(row: *erow) !void {
         prev_sep = is_separator(ch);
         i += 1;
     }
+
+    var changed = (row.hl_open_comment != @intFromBool(in_comment));
+    row.hl_open_comment = @intFromBool(in_comment);
+    if (changed and (row.idx + 1) < E.numrows) {
+        try editorUpdateSyntax(&E.rows.items[row.idx + 1]);
+    }
 }
 
 fn editorSyntaxToColor(hl: u32) u32 {
@@ -818,11 +826,17 @@ fn editorSelectSyntaxHighlight() !void {
 fn editorInsertRow(at: u32, content: []const u8) !void {
     if (at > E.numrows or at < 0) return;
 
-    var row: erow = erow.init(allocator);
+    var row: erow = erow.init(allocator, at, 0);
     try row.rowData.appendSlice(content);
+
     try editorUpdateRow(&row);
 
     try E.rows.insert(at, row);
+
+    for (E.rows.items[at + 1 .. E.numrows + 1]) |*curRow| {
+        curRow.idx += 1;
+    }
+
     E.numrows += 1;
     E.dirty += 1;
 }
@@ -836,6 +850,10 @@ fn editorDelRow(at: u32) !void {
     if (at < 0 or at >= E.numrows) return;
     editorFreeRow(&E.rows.items[at]);
     _ = E.rows.orderedRemove(at);
+
+    for (E.rows.items[at .. E.numrows - 1]) |*curRow| {
+        curRow.idx -= 1;
+    }
 
     E.numrows -= 1;
     E.dirty += 1;
