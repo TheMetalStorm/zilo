@@ -640,6 +640,8 @@ fn editorUpdateSyntax(row: *erow) !void {
 
     if (E.syntax == null) return;
 
+    var keywords = E.syntax.?.keywords;
+
     var scs = E.syntax.?.singleline_comment_start;
     var scs_len = scs.len;
 
@@ -694,6 +696,43 @@ fn editorUpdateSyntax(row: *erow) !void {
                 continue;
             }
         }
+
+        if (prev_sep) {
+            var outJ: usize = 0;
+            for (0..keywords.len) |j| {
+                outJ = j;
+                var word = keywords[j];
+                var klen = word.len;
+                var kw2: bool = word[klen - 1] == '|';
+                if (kw2) {
+                    klen -= 1;
+                }
+
+                if (i + klen < row.renderData.items.len and std.mem.eql(u8, row.renderData.items[i .. i + klen], word[0..klen]) and is_separator(row.renderData.items[i + klen])) {
+                    for (i..i + klen) |a| {
+                        row.hl.items[a] = if (kw2)
+                            @intFromEnum(editorHighlight.HL_KEYWORD2)
+                        else
+                            @intFromEnum(editorHighlight.HL_KEYWORD1);
+                    }
+                    i += klen;
+                    break;
+                }
+                //if (!strncmp(&row->render[i], keywords[j], klen) &&
+                //    is_separator(row->render[i + klen])) {
+                //  memset(&row->hl[i], kw2 ? HL_KEYWORD2 : HL_KEYWORD1, klen);
+                //  i += klen;
+                //  break;
+                //}
+            }
+
+            //TODO???
+            if (outJ != keywords.len - 1) {
+                prev_sep = false;
+                continue;
+            }
+        }
+
         prev_sep = is_separator(ch);
         i += 1;
     }
