@@ -474,7 +474,17 @@ fn editorDrawRows(ab: *ArrayList(u8)) !void {
                 for (E.coloff..E.coloff + len) |j| {
                     var current = E.rows.items[filerow].renderData.items[j];
                     var hl = E.rows.items[filerow].hl.items[j];
-                    if (hl == @intFromEnum(editorHighlight.HL_NORMAL)) {
+                    if (ascii.isControl(current)) {
+                        var sym = if (current <= 26) '@' + current else '?';
+                        try ab.appendSlice("\x1b[7m");
+                        try ab.append(sym);
+                        try ab.appendSlice("\x1b[m");
+                        if (current_color != -1) {
+                            const buf = try std.fmt.allocPrint(allocator, "\x1b[{d}m", .{current_color});
+                            defer allocator.free(buf);
+                            try ab.appendSlice(buf);
+                        }
+                    } else if (hl == @intFromEnum(editorHighlight.HL_NORMAL)) {
                         if (current_color != -1) {
                             try ab.appendSlice("\x1b[39m");
                             current_color = -1;
@@ -718,15 +728,7 @@ fn editorUpdateSyntax(row: *erow) !void {
                     i += klen;
                     break;
                 }
-                //if (!strncmp(&row->render[i], keywords[j], klen) &&
-                //    is_separator(row->render[i + klen])) {
-                //  memset(&row->hl[i], kw2 ? HL_KEYWORD2 : HL_KEYWORD1, klen);
-                //  i += klen;
-                //  break;
-                //}
             }
-
-            //TODO???
             if (outJ != keywords.len - 1) {
                 prev_sep = false;
                 continue;
