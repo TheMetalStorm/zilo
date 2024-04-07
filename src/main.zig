@@ -280,9 +280,12 @@ fn editorOpen(filename: []const u8) !void {
     }
 
     try editorSelectSyntaxHighlight();
-
-    var file = try std.fs.cwd().openFile(filename, .{});
-    defer file.close();
+    var file: std.fs.File = undefined;
+    if (std.fs.cwd().openFile(filename, .{})) |foundFile| {
+        file = foundFile;
+    } else |_| {
+        die("The file you are trying to edit was not found!", true);
+    }
 
     var buf: [1000]u8 = undefined;
     while (try file.reader().readUntilDelimiterOrEof(buf[0..], '\n')) |line| {
