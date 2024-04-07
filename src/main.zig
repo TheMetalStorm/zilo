@@ -1,5 +1,3 @@
-//FIXME: Cursor blinks weirdly, apperantly never worked?
-
 const std = @import("std");
 const ascii = std.ascii;
 const print = std.debug.print;
