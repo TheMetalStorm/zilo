@@ -19,13 +19,15 @@ const c = @cImport({
 
 //enum
 const editorKey = enum(u32) { BACKSPACE = 127, ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
-const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_COMMENT, HL_KEYWORD1, HL_KEYWORD2, HL_STRING, HL_NUMBER, HL_MATCH };
+const editorHighlight = enum(u32) { HL_NORMAL = 0, HL_COMMENT, HL_MLCOMMENT, HL_KEYWORD1, HL_KEYWORD2, HL_STRING, HL_NUMBER, HL_MATCH };
 
 const editorSyntax = struct {
     filetype: []const u8,
     filematch: []const []const u8,
     keywords: []const []const u8,
     singleline_comment_start: []const u8,
+    multiline_comment_start: []const u8,
+    multiline_comment_end: []const u8,
     flags: HL_HIGHLIGHT_FLAGS,
 };
 
@@ -653,26 +655,57 @@ fn editorUpdateSyntax(row: *erow) !void {
     var keywords = E.syntax.?.keywords;
 
     var scs = E.syntax.?.singleline_comment_start;
+    var mcs = E.syntax.?.multiline_comment_start;
+    var mce = E.syntax.?.multiline_comment_end;
+
     var scs_len = scs.len;
+    var mcs_len = mcs.len;
+    var mce_len = mce.len;
 
     var prev_sep = true;
     var in_string: u8 = 0;
+    var in_comment: bool = false;
     var i: usize = 0;
     while (i < row.renderData.items.len) {
         var prev_hl = if (i > 0) row.hl.items[i - 1] else @intFromEnum(editorHighlight.HL_NORMAL);
         var ch = row.renderData.items[i];
 
-        if (row.renderData.items.len >= scs_len and scs_len > 0 and in_string == 0 and (i + scs_len) < row.renderData.items.len) {
-            var a = row.renderData.items[i .. i + scs_len];
-            var s = scs;
-            _ = a;
-            _ = s;
+        if ((i + scs_len) <= row.renderData.items.len and scs_len > 0 and in_string == 0 and !in_comment) {
             if (std.mem.eql(u8, row.renderData.items[i .. i + scs_len], scs)) {
                 //if (!strncmp(&row->render[i], scs, scs_len)) {
                 for (i..row.renderData.items.len) |j| {
                     row.hl.items[j] = @intFromEnum(editorHighlight.HL_COMMENT);
                 }
                 break;
+            }
+        }
+
+        if (mcs_len > 0 and mce_len > 0 and in_string == 0) {
+            if (in_comment) {
+                row.hl.items[i] = @intFromEnum(editorHighlight.HL_MLCOMMENT);
+                if ((i + mce_len) <= row.renderData.items.len) {
+                    if (std.mem.eql(u8, row.renderData.items[i .. i + mce_len], mce)) {
+                        for (i..i + mce_len) |a| {
+                            row.hl.items[a] = @intFromEnum(editorHighlight.HL_MLCOMMENT);
+                        }
+                        i += mce_len;
+                        in_comment = false;
+                        prev_sep = true;
+                        continue;
+                    } else {
+                        i += 1;
+                        continue;
+                    }
+                }
+            } else if ((i + mcs_len) <= row.renderData.items.len) {
+                if (std.mem.eql(u8, row.renderData.items[i .. i + mcs_len], mcs)) {
+                    for (i..i + mcs_len) |a| {
+                        row.hl.items[a] = @intFromEnum(editorHighlight.HL_MLCOMMENT);
+                    }
+                    i += mcs_len;
+                    in_comment = true;
+                    continue;
+                }
             }
         }
 
@@ -743,6 +776,7 @@ fn editorUpdateSyntax(row: *erow) !void {
 fn editorSyntaxToColor(hl: u32) u32 {
     switch (hl) {
         @intFromEnum(editorHighlight.HL_COMMENT) => return 36,
+        @intFromEnum(editorHighlight.HL_MLCOMMENT) => return 36,
         @intFromEnum(editorHighlight.HL_NUMBER) => return 31,
         @intFromEnum(editorHighlight.HL_KEYWORD1) => return 33,
         @intFromEnum(editorHighlight.HL_KEYWORD2) => return 32,
@@ -1030,8 +1064,8 @@ pub fn initEditor() void {
 
 pub fn setupHLDB() !void {
     HLDB = ArrayList(editorSyntax).init(allocator);
-    try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .keywords = &C_HL_keywords, .singleline_comment_start = "//", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
-    try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .keywords = &ZIG_HL_keywords, .singleline_comment_start = "//", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
+    try HLDB.append(.{ .filetype = "c", .filematch = &C_HL_extensions, .keywords = &C_HL_keywords, .singleline_comment_start = "//", .multiline_comment_start = "/*", .multiline_comment_end = "*/", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
+    try HLDB.append(.{ .filetype = "zig", .filematch = &ZIG_HL_extensions, .keywords = &ZIG_HL_keywords, .singleline_comment_start = "//", .multiline_comment_start = "", .multiline_comment_end = "", .flags = HL_HIGHLIGHT_FLAGS{ .numbers = true, .strings = true } });
 }
 
 pub fn closeProgram() void {
