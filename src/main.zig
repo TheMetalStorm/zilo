@@ -619,7 +619,7 @@ fn getCursorPosition(rows: *u32, cols: *u32) !i2 {
 
 fn getWindowSize(rows: *u32, cols: *u32) !i2 {
     var ws: os.linux.winsize = undefined;
-    if (std.os.system.ioctl(os.STDOUT_FILENO, TIOCGWINSZ, &ws) == -1) {
+    if (std.os.system.ioctl(os.STDOUT_FILENO, TIOCGWINSZ, @intFromPtr(&ws)) == -1) {
         if (os.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B") == error.WriteError) die("write", true);
         return try getCursorPosition(rows, cols);
     } else if (ws.ws_col == 0) {
