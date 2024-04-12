@@ -561,7 +561,7 @@ fn editorDrawMessageBar(ab: *ArrayList(u8)) !void {
 
 //terminal
 
-fn getCursorPosition(rows: *u32, cols: *u32) i2 {
+fn getCursorPosition(rows: *u32, cols: *u32) !i2 {
     var buf: [32]u8 = undefined;
     var i: u32 = 0;
 
@@ -579,18 +579,59 @@ fn getCursorPosition(rows: *u32, cols: *u32) i2 {
     if (buf[0] != '\x1b') return -1;
     if (buf[1] != '[') return -1;
 
-    if (c.sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
+    var newBuf = buf[2..buf.len];
+
+    var rowBuf: [32]u8 = undefined;
+    var colBuf: [32]u8 = undefined;
+    var colI: usize = 0;
+    var rowI: usize = 0;
+    var foundRow = false;
+    for (newBuf) |ch| {
+        if (foundRow) {
+            if (ascii.isDigit(ch)) {
+                colBuf[colI] = ch;
+                colI += 1;
+            } else {
+                if (colI == 0) die("getCursorPos Col", true) else break;
+            }
+        } else if (ch == ';') {
+            foundRow = true;
+            continue;
+        } else {
+            if (ascii.isDigit(ch)) {
+                rowBuf[rowI] = ch;
+                rowI += 1;
+            } else {
+                die("getCursorPos Row", true);
+            }
+        }
+    }
+
+    var row = rowBuf[0..rowI];
+    if (std.fmt.parseInt(u32, row, 10)) |res| {
+        rows.* = res;
+    } else |_| {
+        die("getCursorPos", true);
+    }
+
+    var col = colBuf[0..colI];
+    if (std.fmt.parseInt(u32, col, 10)) |res| {
+        cols.* = res;
+    } else |_| {
+        die("getCursorPos", true);
+    }
+
     return 0;
 }
 
-fn getWindowSize(rows: *u32, cols: *u32) i2 {
+fn getWindowSize(rows: *u32, cols: *u32) !i2 {
     var ws: os.linux.winsize = undefined;
     if (std.os.system.ioctl(os.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
         if (os.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B") == error.WriteError) die("write", true);
-        return getCursorPosition(rows, cols);
+        return try getCursorPosition(rows, cols);
     } else if (ws.ws_col == 0) {
         if (os.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B") == error.WriteError) die("write", true);
-        return getCursorPosition(rows, cols);
+        return try getCursorPosition(rows, cols);
     } else {
         cols.* = ws.ws_col;
         rows.* = ws.ws_row;
@@ -1062,7 +1103,7 @@ fn die(str: []const u8, exit: bool) void {
 
 //init
 
-pub fn initEditor() void {
+pub fn initEditor() !void {
     E.cx = 0;
     E.cy = 0;
     E.rx = 0;
@@ -1070,7 +1111,7 @@ pub fn initEditor() void {
     E.coloff = 0;
     E.numrows = 0;
     E.dirty = 0;
-    if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize", true);
+    if (try getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize", true);
     E.screenrows -= 2;
     var rows = ArrayList(erow).init(allocator);
     var filename = ArrayList(u8).init(allocator);
@@ -1100,7 +1141,7 @@ pub fn main() !void {
     defer args.deinit();
 
     try enableRawMode();
-    initEditor();
+    try initEditor();
     defer deinitEditor();
 
     _ = args.next();
