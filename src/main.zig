@@ -5,15 +5,10 @@ const time = std.time;
 const ArrayList = std.ArrayList;
 const builtin = std.builtin;
 const os = std.os;
+const stdin = std.io.getStdIn().reader();
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
-const c = @cImport({
-    @cInclude("unistd.h");
-    @cInclude("stdlib.h");
-    @cInclude("stdio.h");
-    @cInclude("ctype.h");
-    @cInclude("sys/ioctl.h");
-});
+const TIOCGWINSZ = @as(c_int, 0x5413);
 
 //enum
 const editorKey = enum(u32) { BACKSPACE = 127, ARROW_LEFT = 1000, ARROW_RIGHT, ARROW_UP, ARROW_DOWN, DEL_KEY, HOME_KEY, END_KEY, PAGE_UP, PAGE_DOWN };
@@ -78,8 +73,6 @@ const ZIG_HL_extensions = [_][]const u8{".zig"};
 const ZIG_HL_keywords = [_][]const u8{ "addrspace", "align", "allowzero", "and", "anyframe", "anytype", "asm", "async", "await", "break", "callconv", "catch", "comptime", "const", "continue", "defer", "else", "enum", "errdefer", "error", "export", "extern", "fn", "for", "if", "inline", "linksection", "noalias", "noinline", "nosuspend", "opaque", "or", "orelse", "packed", "pub", "resume", "return", "struct", "suspend", "switch", "test", "threadlocal", "try", "union", "unreachable", "usingnamespace", "var", "volatile", "while", "i8|", "u8|", "i16|", "u16|", "i32|", "u32|", "i64|", "u64|", "i128|", "u128|", "isize|", "usize|", "c_char|", "c_short|", "c_ushort|", "c_int|", "c_uint|", "c_long|", "c_ulong|", "c_longlong|", "c_ulonglong|", "c_longdouble|", "f16|", "f32|", "f64|", "f80|", "f128|", "bool|", "anyopaque|", "void|", "noreturn|", "type|", "anyerror|", "comptime_int|", "comptime_float|" };
 
 //const
-const stdin = std.io.getStdIn().reader();
-const stdout = std.io.getStdOut().writer();
 const ZILO_VERSION = "0.0.1";
 const KILO_TAB_STOP = 8;
 const KILO_QUIT_TIMES = 3;
@@ -568,7 +561,7 @@ fn getCursorPosition(rows: *u32, cols: *u32) !i2 {
     if (os.write(os.STDOUT_FILENO, "\x1b[6n") == error.WriteError) die("write", true);
 
     while (i < buf.len) {
-        if (c.read(os.STDIN_FILENO, &buf[i], 1) != 1) break;
+        buf[i] = try stdin.readByte();
         if (buf[i] == 'R') {
             i += 1;
             break;
@@ -626,7 +619,7 @@ fn getCursorPosition(rows: *u32, cols: *u32) !i2 {
 
 fn getWindowSize(rows: *u32, cols: *u32) !i2 {
     var ws: os.linux.winsize = undefined;
-    if (std.os.system.ioctl(os.STDOUT_FILENO, c.TIOCGWINSZ, &ws) == -1) {
+    if (std.os.system.ioctl(os.STDOUT_FILENO, TIOCGWINSZ, &ws) == -1) {
         if (os.write(os.STDOUT_FILENO, "\x1b[999C\x1b[999B") == error.WriteError) die("write", true);
         return try getCursorPosition(rows, cols);
     } else if (ws.ws_col == 0) {
@@ -1014,12 +1007,13 @@ fn editorReadKey() u32 {
 
     if (readChar == '\x1b') {
         var seq: [3]u8 = undefined;
-        if (c.read(os.STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
-        if (c.read(os.STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+
+        seq[0] = stdin.readByte() catch return '\x1b';
+        seq[1] = stdin.readByte() catch return '\x1b';
 
         if (seq[0] == '[') {
             if (seq[1] >= '0' and seq[1] <= '9') {
-                if (c.read(os.STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
+                seq[2] = stdin.readByte() catch return '\x1b';
                 if (seq[2] == '~') {
                     switch (seq[1]) {
                         '1' => return @intFromEnum(editorKey.HOME_KEY),
