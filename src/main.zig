@@ -1076,8 +1076,8 @@ fn enableRawMode() !void {
         os.linux.tcflag_t,
         os.linux.ECHO | os.linux.ICANON | os.linux.ISIG | os.linux.IEXTEN,
     );
-    raw.cc[os.linux.V.MIN] = 0;
-    raw.cc[os.linux.V.TIME] = 1;
+    raw.cc[os.linux.V.MIN] = 1;
+    raw.cc[os.linux.V.TIME] = 0;
 
     var new = os.tcsetattr(os.STDIN_FILENO, .FLUSH, raw);
     if (@TypeOf(new) == os.TermiosSetError) {
